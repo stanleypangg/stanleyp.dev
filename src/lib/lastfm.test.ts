@@ -104,6 +104,12 @@ describe('getTopAlbums', () => {
     const result = await getTopAlbums('7day', 10, API_KEY, USERNAME);
     expect(result[0].imageUrl).toBeNull();
   });
+
+  it('throws on non-ok response', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 403 });
+    const { getTopAlbums } = await import('./lastfm');
+    await expect(getTopAlbums('7day', 10, API_KEY, USERNAME)).rejects.toThrow();
+  });
 });
 
 describe('getRecentTracks', () => {
@@ -156,6 +162,12 @@ describe('getRecentTracks', () => {
     const result = await getRecentTracks(10, API_KEY, USERNAME);
     expect(result[0].timestamp).toBeNull();
   });
+
+  it('throws on non-ok response', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 403 });
+    const { getRecentTracks } = await import('./lastfm');
+    await expect(getRecentTracks(10, API_KEY, USERNAME)).rejects.toThrow();
+  });
 });
 
 describe('getUserInfo', () => {
@@ -170,5 +182,11 @@ describe('getUserInfo', () => {
     const { getUserInfo } = await import('./lastfm');
     const result = await getUserInfo(API_KEY, USERNAME);
     expect(result).toEqual({ name: 'testuser', playcount: 12345 });
+  });
+
+  it('throws on non-ok response', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 403 });
+    const { getUserInfo } = await import('./lastfm');
+    await expect(getUserInfo(API_KEY, USERNAME)).rejects.toThrow();
   });
 });

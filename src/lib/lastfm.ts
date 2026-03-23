@@ -18,7 +18,7 @@ export interface Track {
   name: string;
   artist: string;
   url: string;
-  timestamp: number | null;
+  timestamp: number | null;  // Unix timestamp, null means now-playing
 }
 
 export interface UserInfo {
