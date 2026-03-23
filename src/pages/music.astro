@@ -506,7 +506,8 @@ import Layout from '../layouts/Layout.astro';
     border-radius: 2px;
     transform: scaleX(0);
     transform-origin: left;
-    animation: bar-grow 600ms cubic-bezier(0.16, 1, 0.3, 1) var(--delay, 0ms) forwards;
+    animation: bar-grow 600ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    animation-delay: var(--delay, 0ms);
   }
 
   @keyframes bar-grow {
