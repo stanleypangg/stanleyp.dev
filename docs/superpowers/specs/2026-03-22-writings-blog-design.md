@@ -26,7 +26,7 @@ import { defineCollection, z } from 'astro:content';
 import { glob } from 'astro/loaders';
 
 const writing = defineCollection({
-  loader: glob({ pattern: '**/*.{md,mdx}', base: './src/content/writing' }),
+  loader: glob({ pattern: '*.{md,mdx}', base: './src/content/writing' }),
   schema: z.object({
     title: z.string(),
     date:  z.coerce.date(),
@@ -36,6 +36,8 @@ const writing = defineCollection({
 
 export const collections = { writing };
 ```
+
+Note: `*.{md,mdx}` (not `**/*.{md,mdx}`) restricts to flat files only. This keeps slugs as single path segments and matches the single-segment dynamic route `[slug].astro`. Subdirectory structures are out of scope.
 
 **Frontmatter**:
 
@@ -47,7 +49,7 @@ draft: true   # optional — omit or set false to publish
 ---
 ```
 
-**Slug**: In Astro v5, entries have an `id` field (the file path relative to the loader base, e.g. `my-first-post.md`). Derive the URL slug by stripping the extension: `entry.id.replace(/\.mdx?$/, '')`. This gives `/writing/my-first-post`.
+**Slug**: In Astro v5 with the glob loader, `entry.id` is the github-slugified filename without extension (e.g. `my-first-post.md` → `id = 'my-first-post'`). Use `entry.id` directly as the URL slug. The `replace(/\.mdx?$/, '')` pattern is retained in the code as a no-op safety guard in case `generateId` is ever customised.
 
 **Drafts**: Posts with `draft: true` are excluded via the `getCollection` filter. Omitting `draft` defaults to published.
 
@@ -151,7 +153,7 @@ export async function getStaticPaths() {
 | `h3` | Fraunces, weight 300, `--text-base`, `margin-top: 2em` |
 | `blockquote` | `border-left: 2px solid var(--border)`, `padding-left: 1rem`, `color: var(--muted)` |
 | `code` (inline) | monospace, `--text-xs`, `background: var(--border)` at low opacity, `padding: 0.1em 0.3em` |
-| `pre` | full-width, monospace, `--text-xs`, dark bg in both themes, `overflow-x: auto`, `padding: 1.25rem` |
+| `pre` | full-width, monospace, `--text-xs`, `background: oklch(14% 0.003 260)`, `color: oklch(90% 0.004 80)`, `overflow-x: auto`, `padding: 1.25rem` — same values in both light and dark themes (code blocks are always dark) |
 | `pre code` | reset background/padding (pre provides the container) |
 | `img` | `max-width: 100%`, `margin-block: 2rem` |
 | `figure` | `margin-block: 2rem` |
