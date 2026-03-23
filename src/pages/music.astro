@@ -3,8 +3,8 @@ import Layout from '../layouts/Layout.astro';
 ---
 
 <Layout title="Listening — Stanley Pang" description="Music I've been listening to.">
-  <header>
-    <span class="label">Listening</span>
+  <header class="page-header">
+    <h1 class="page-title">Listening history</h1>
   </header>
 
   <hr class="rule" />
@@ -58,7 +58,7 @@ import Layout from '../layouts/Layout.astro';
     </div>
   </section>
 
-<script is:inline>
+<script is:inline data-astro-rerun>
   // Restore last rendered HTML synchronously — runs before the deferred module
   // so cached content appears immediately on every navigation (no skeleton flash).
   (function () {
@@ -262,10 +262,8 @@ import Layout from '../layouts/Layout.astro';
     } catch { /* quota exceeded */ }
   }
 
-  // ── Main load ─────────────────────────────────────────────────────────────
-  let currentPeriod: Period = (() => {
-    try { return (localStorage.getItem('music_last_period') as Period) || '7day'; } catch { return '7day'; }
-  })();
+  // ── State — reset by init() on every navigation ───────────────────────────
+  let currentPeriod: Period = '7day';
   let viewMode: 'grid' | 'chart' = 'grid';
 
   // Last successfully loaded data — used for instant re-render on view toggle
@@ -285,10 +283,11 @@ import Layout from '../layouts/Layout.astro';
         renderArtistsChart(cached.artists);
         renderAlbumsChart(cached.albums);
       } else {
-        // Skip re-render if the inline script already restored this period's HTML —
-        // re-inserting identical HTML destroys and re-creates <img> nodes, causing
-        // the browser to re-request images and flash.
-        const htmlAlreadyRestored = !!localStorage.getItem(`music_ui_artists_${period}`);
+        // Skip re-render if the inline script already restored cached HTML into the DOM.
+        // Checking the DOM (not localStorage) is the source of truth — localStorage
+        // keys persist across navigations even when the DOM still has skeleton placeholders.
+        const artistsGrid = document.getElementById('artists-grid');
+        const htmlAlreadyRestored = artistsGrid && !artistsGrid.querySelector('.skeleton');
         if (!htmlAlreadyRestored) {
           renderArtists(cached.artists, new Map(Object.entries(cached.images)));
           saveGridHtml('artists', period);
@@ -350,7 +349,11 @@ import Layout from '../layouts/Layout.astro';
   async function loadStaticData() {
     const cachedTracks = cacheGet<Track[]>('music_tracks', TTL.tracks);
     if (cachedTracks) {
-      if (!localStorage.getItem('music_ui_tracks')) { renderTracks(cachedTracks); saveTracksHtml(); }
+      const trackList = document.getElementById('track-list');
+      if (trackList && trackList.querySelector('.skeleton-row')) {
+        renderTracks(cachedTracks);
+        saveTracksHtml();
+      }
       return;
     }
 
@@ -359,71 +362,99 @@ import Layout from '../layouts/Layout.astro';
       .catch(() => showError('section-tracks'));
   }
 
-  // ── Toggle ────────────────────────────────────────────────────────────────
-  document.querySelectorAll<HTMLButtonElement>('.toggle-btn').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      if (!btn.dataset.period) return;   // ignore view buttons
-      const period = btn.dataset.period as Period;
-      if (period === currentPeriod) return;
-      currentPeriod = period;
-      try { localStorage.setItem('music_last_period', period); } catch { /* ignore */ }
+  // ── Init — runs on every navigation via astro:page-load ──────────────────
+  // Module scripts are ES module singletons (only evaluated once), so all
+  // event listener binding and data loading must happen inside this function
+  // which is re-called by astro:page-load on every View Transition navigation.
+  async function init() {
+    // Reset per-navigation state
+    currentPeriod = (() => {
+      try { return (localStorage.getItem('music_last_period') as Period) || '7day'; } catch { return '7day'; }
+    })();
+    viewMode = 'grid';
+    lastArtists = [];
+    lastImages  = {};
+    lastAlbums  = [];
 
-      // Update active state
-      document.querySelectorAll('[data-period]').forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
+    // ── Period toggle ──────────────────────────────────────────────────────
+    document.querySelectorAll<HTMLButtonElement>('.toggle-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        if (!btn.dataset.period) return;   // ignore view buttons
+        const period = btn.dataset.period as Period;
+        if (period === currentPeriod) return;
+        currentPeriod = period;
+        try { localStorage.setItem('music_last_period', period); } catch { /* ignore */ }
 
-      // Re-render skeletons for period-dependent sections only
-      const artistsGrid = document.getElementById('artists-grid')!;
-      const albumsGrid = document.getElementById('albums-grid')!;
-      if (viewMode === 'chart') {
-        artistsGrid.classList.add('chart-view');
-        artistsGrid.innerHTML = Array.from({ length: 10 }, (_, i) =>
-          `<div class="chart-row" style="--delay:${i * 40}ms">
-            <span class="chart-label" style="background:var(--subtle);height:0.75rem;border-radius:2px"></span>
-            <div class="chart-track"><div class="chart-bar" style="--pct:60%"></div></div>
-            <span class="chart-count" style="background:var(--subtle);width:2rem;height:0.75rem;border-radius:2px"></span>
-          </div>`).join('');
-        albumsGrid.classList.add('chart-view');
-        albumsGrid.innerHTML = artistsGrid.innerHTML;
-      } else {
-        artistsGrid.innerHTML = Array.from({ length: 10 }, () => '<div class="grid-item skeleton"></div>').join('');
-        albumsGrid.innerHTML  = Array.from({ length: 10 }, () => '<div class="grid-item skeleton"></div>').join('');
-      }
+        document.querySelectorAll('[data-period]').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
 
-      await loadPeriodData(period);
+        const artistsGrid = document.getElementById('artists-grid')!;
+        const albumsGrid = document.getElementById('albums-grid')!;
+        if (viewMode === 'chart') {
+          artistsGrid.classList.add('chart-view');
+          artistsGrid.innerHTML = Array.from({ length: 10 }, () =>
+            `<div class="chart-row">
+              <span class="chart-label" style="background:var(--subtle);height:0.75rem;border-radius:2px"></span>
+              <div class="chart-track"><div class="chart-bar" style="width:60%"></div></div>
+              <span class="chart-count" style="background:var(--subtle);width:2rem;height:0.75rem;border-radius:2px"></span>
+            </div>`).join('');
+          albumsGrid.classList.add('chart-view');
+          albumsGrid.innerHTML = artistsGrid.innerHTML;
+        } else {
+          artistsGrid.innerHTML = Array.from({ length: 10 }, () => '<div class="grid-item skeleton"></div>').join('');
+          albumsGrid.innerHTML  = Array.from({ length: 10 }, () => '<div class="grid-item skeleton"></div>').join('');
+        }
+
+        await loadPeriodData(period);
+      });
     });
-  });
 
-  // ── View toggle ───────────────────────────────────────────────────────────
-  document.querySelectorAll<HTMLButtonElement>('[data-view]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const mode = btn.dataset.view as 'grid' | 'chart';
-      if (mode === viewMode) return;
-      viewMode = mode;
+    // ── View toggle ────────────────────────────────────────────────────────
+    document.querySelectorAll<HTMLButtonElement>('[data-view]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const mode = btn.dataset.view as 'grid' | 'chart';
+        if (mode === viewMode) return;
+        viewMode = mode;
 
-      document.querySelectorAll('[data-view]').forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
+        document.querySelectorAll('[data-view]').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
 
-      if (viewMode === 'chart') {
-        renderArtistsChart(lastArtists);
-        renderAlbumsChart(lastAlbums);
-      } else {
-        renderArtists(lastArtists, new Map(Object.entries(lastImages)));
-        saveGridHtml('artists', currentPeriod);
-        renderAlbums(lastAlbums);
-        saveGridHtml('albums', currentPeriod);
-      }
+        if (viewMode === 'chart') {
+          renderArtistsChart(lastArtists);
+          renderAlbumsChart(lastAlbums);
+        } else {
+          renderArtists(lastArtists, new Map(Object.entries(lastImages)));
+          saveGridHtml('artists', currentPeriod);
+          renderAlbums(lastAlbums);
+          saveGridHtml('albums', currentPeriod);
+        }
+      });
     });
-  });
 
-  // ── Initial load ──────────────────────────────────────────────────────────
-  await Promise.allSettled([
-    loadPeriodData(currentPeriod),
-    loadStaticData(),
-  ]);
+    // ── Load data ──────────────────────────────────────────────────────────
+    await Promise.allSettled([
+      loadPeriodData(currentPeriod),
+      loadStaticData(),
+    ]);
+  }
+
+  // astro:page-load fires on first load AND on every View Transition navigation
+  document.addEventListener('astro:page-load', init);
 </script>
 
 <style>
+  .page-header {
+    margin-bottom: 0;
+  }
+
+  .page-title {
+    font-family: var(--font-display);
+    font-weight: 300;
+    font-optical-sizing: auto;
+    font-size: var(--text-lg);
+    letter-spacing: -0.01em;
+  }
+
   /* Period toggle */
   .toggle {
     display: flex;
@@ -517,16 +548,27 @@ import Layout from '../layouts/Layout.astro';
     gap: 0.5rem;
   }
 
-  /* Skeleton */
-  .skeleton {
-    aspect-ratio: 1;
+  /* Skeleton — :global() so JS-injected skeletons (period toggle) also get styled */
+  :global(.grid-item.skeleton) {
     background: var(--subtle);
+    animation: skeleton-pulse 1.4s ease-in-out infinite;
   }
 
   .skeleton-row {
     height: 1.2rem;
     background: var(--subtle);
     border-radius: 2px;
+    animation: skeleton-pulse 1.4s ease-in-out infinite;
+  }
+
+  @keyframes skeleton-pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.45; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :global(.grid-item.skeleton),
+    .skeleton-row { animation: none; }
   }
 
   /* Error state */
@@ -538,7 +580,7 @@ import Layout from '../layouts/Layout.astro';
   /* Chart view — overrides .grid auto-fill when active */
   /* :global() required: chart elements are injected via innerHTML, not in the Astro template,
      so they don't receive the scoped data-astro-cid attribute. */
-  :global(.chart-view) {
+  :global(.grid.chart-view) {
     display: flex;
     flex-direction: column;
     gap: 0;
