@@ -16,18 +16,14 @@ const posts = (await getCollection('writing', ({ data }) => !data.draft))
     )}
   </header>
 
-  <hr class="rule" />
+  <div style="margin-top: 1.5rem;"></div>
 
   {posts.length === 0 ? (
     <p class="empty">Nothing here yet.</p>
   ) : (
     <ul class="index-list">
-      {posts.map((post, i) => (
+      {posts.map((post) => (
         <li class="post-item">
-          <span class="index-num">
-            {String(i + 1).padStart(2, '0')}
-          </span>
-
           <div class="entry">
             <a href={`/writing/${post.id.replace(/\.mdx?$/, '')}`} class="post-title">
               {post.data.title}
