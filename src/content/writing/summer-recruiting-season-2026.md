@@ -19,6 +19,10 @@ that being said, i'm going to keep building, but differently this time. i'm not 
 
 the strawberry matcha in SF is still the destination, but i'm actually going to be in one piece when i get there. i'm putting back on my wired earbuds, turning on Esdeekid, and will keep it pushing.
 
+![](/writing/summer-recruiting-season-2026/image-1.gif)
+
+![](/writing/summer-recruiting-season-2026/image-2.gif)
+
 ---
 
 *Originally posted on [LinkedIn](https://www.linkedin.com/posts/stanleypangg_essay-iaintreadingallat-esdeekid-activity-7438122837204279296-OfXL?utm_source=share&utm_medium=member_desktop&rcm=ACoAAEbgNcYBgVXNQH1xWppUtKhb3i5SvfxC3vU).*
