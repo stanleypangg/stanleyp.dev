@@ -1,0 +1,157 @@
+<canvas id="dither-bg" aria-hidden="true" transition:persist></canvas>
+
+<style>
+  #dither-bg {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    pointer-events: none;
+    z-index: 0;
+    display: block;
+  }
+</style>
+
+<script>
+  // ── Shaders ───────────────────────────────────────────────────
+  const VS = `
+    attribute vec2 a_pos;
+    void main() { gl_Position = vec4(a_pos, 0.0, 1.0); }
+  `;
+
+  // Bayer 4×4 ordered dithering — dots rendered with transparency,
+  // body background-color shows through the gaps.
+  const FS = `
+    precision mediump float;
+    uniform sampler2D u_bayer;
+    uniform vec3  u_dot;
+    uniform float u_spread;
+    uniform float u_scale;
+
+    void main() {
+      vec2 coord     = floor(gl_FragCoord.xy);
+      vec2 bUV       = mod(coord, u_scale * 4.0) / (u_scale * 4.0);
+      float threshold = texture2D(u_bayer, bUV).r;
+      float isDot    = step(threshold, u_spread);
+      gl_FragColor   = vec4(u_dot, isDot);
+    }
+  `;
+
+  // ── Bayer 4×4 matrix (values 0–255 mapped from 0–15) ─────────
+  // Standard Bayer ordered-dither matrix × 17:
+  //  0  8  2 10      0  136  34  170
+  // 12  4 14  6  →  204   68 238  102
+  //  3 11  1  9     51  187  17  153
+  // 15  7 13  5    255  119 221   85
+  const BAYER = new Uint8Array([
+      0, 136,  34, 170,
+    204,  68, 238, 102,
+     51, 187,  17, 153,
+    255, 119, 221,  85,
+  ]);
+
+  // ── Helpers ───────────────────────────────────────────────────
+  function readCSSColor(varName: string): [number, number, number] {
+    const el = document.createElement('div');
+    el.setAttribute('style', `position:absolute;width:1px;height:1px;visibility:hidden;background:var(${varName})`);
+    document.body.appendChild(el);
+    const raw = getComputedStyle(el).backgroundColor;
+    el.remove();
+    const m = raw.match(/[\d.]+/g) ?? ['0', '0', '0'];
+    return [+m[0] / 255, +m[1] / 255, +m[2] / 255];
+  }
+
+  function makeShader(gl: WebGLRenderingContext, type: number, src: string) {
+    const s = gl.createShader(type)!;
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    return s;
+  }
+
+  function makeProgram(gl: WebGLRenderingContext) {
+    const p = gl.createProgram()!;
+    gl.attachShader(p, makeShader(gl, gl.VERTEX_SHADER, VS));
+    gl.attachShader(p, makeShader(gl, gl.FRAGMENT_SHADER, FS));
+    gl.linkProgram(p);
+    return p;
+  }
+
+  // ── Init ──────────────────────────────────────────────────────
+  function init() {
+    const canvas = document.getElementById('dither-bg') as HTMLCanvasElement | null;
+    if (!canvas) return;
+
+    // Already set up — just re-render (happens after astro:page-load with transition:persist)
+    const existing = (canvas as any)._dither;
+    if (existing) { existing.render(); return; }
+
+    const gl = canvas.getContext('webgl', { alpha: true, premultipliedAlpha: false });
+    if (!gl) return;
+
+    const prog = makeProgram(gl);
+    gl.useProgram(prog);
+
+    // Full-screen triangle pair
+    const buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+      -1, -1,  1, -1, -1,  1,
+      -1,  1,  1, -1,  1,  1,
+    ]), gl.STATIC_DRAW);
+    const aPos = gl.getAttribLocation(prog, 'a_pos');
+    gl.enableVertexAttribArray(aPos);
+    gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+    // Bayer texture — NEAREST + REPEAT so it tiles exactly
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, 4, 4, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, BAYER);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+    gl.uniform1i(gl.getUniformLocation(prog, 'u_bayer'), 0);
+
+    // Static uniforms
+    gl.uniform1f(gl.getUniformLocation(prog, 'u_scale'), 2.0); // 2px/cell → 8px tile
+
+    const uDot    = gl.getUniformLocation(prog, 'u_dot');
+    const uSpread = gl.getUniformLocation(prog, 'u_spread');
+
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+    function render() {
+      canvas!.width  = window.innerWidth  * devicePixelRatio | 0;
+      canvas!.height = window.innerHeight * devicePixelRatio | 0;
+      canvas!.style.width  = '100vw';
+      canvas!.style.height = '100vh';
+
+      gl!.viewport(0, 0, canvas!.width, canvas!.height);
+      gl!.clearColor(0, 0, 0, 0);
+      gl!.clear(gl!.COLOR_BUFFER_BIT);
+
+      const isDark = document.documentElement.classList.contains('dark');
+      gl!.uniform3fv(uDot, readCSSColor('--dot'));
+      gl!.uniform1f(uSpread, isDark ? 0.09 : 0.06);
+
+      gl!.drawArrays(gl!.TRIANGLES, 0, 6);
+    }
+
+    (canvas as any)._dither = { render };
+
+    // Re-render on resize
+    new ResizeObserver(render).observe(document.documentElement);
+
+    // Re-render on theme toggle (watches class changes on <html>)
+    new MutationObserver(render).observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class'],
+    });
+
+    render();
+  }
+
+  init();
+  document.addEventListener('astro:page-load', init);
+</script>
