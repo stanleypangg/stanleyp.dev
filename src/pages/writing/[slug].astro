@@ -64,4 +64,10 @@ const fmt = new Intl.DateTimeFormat('en-US', { month: 'short', year: 'numeric' }
     color: var(--fg);
     padding-left: 0.25rem;
   }
+
+  @media (prefers-reduced-motion: reduce) {
+    .back-link {
+      transition: color 200ms;
+    }
+  }
 </style>
