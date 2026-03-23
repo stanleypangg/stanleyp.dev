@@ -23,7 +23,9 @@ async function getAccessToken(): Promise<string> {
     }),
   });
 
+  if (!res.ok) throw new Error(`Spotify token refresh failed: ${res.status}`);
   const data = await res.json();
+  if (!data.access_token) throw new Error('Spotify token response missing access_token');
   return data.access_token;
 }
 
@@ -40,41 +42,52 @@ export async function GET() {
     });
   }
 
-  const accessToken = await getAccessToken();
-  const headers = { Authorization: `Bearer ${accessToken}` };
+  try {
+    const accessToken = await getAccessToken();
+    const headers = { Authorization: `Bearer ${accessToken}` };
 
-  const nowRes = await fetch(NOW_PLAYING_URL, { headers });
+    const nowRes = await fetch(NOW_PLAYING_URL, { headers });
 
-  if (nowRes.status === 200) {
-    const data = await nowRes.json();
-    if (data?.item) {
-      return json({
-        isPlaying: data.is_playing,
-        title: data.item.name,
-        artist: data.item.artists.map((a: { name: string }) => a.name).join(', '),
-        albumImageUrl: data.item.album.images[1]?.url ?? data.item.album.images[0]?.url,
-        songUrl: data.item.external_urls.spotify,
-      });
+    if (nowRes.status === 200) {
+      const data = await nowRes.json();
+      if (data?.item) {
+        return json({
+          isPlaying: data.is_playing ?? false,
+          title: data.item.name ?? null,
+          artist: Array.isArray(data.item.artists)
+            ? data.item.artists.map((a: { name: string }) => a.name).join(', ')
+            : null,
+          albumImageUrl: data.item.album?.images?.[1]?.url ?? data.item.album?.images?.[0]?.url ?? null,
+          songUrl: data.item.external_urls?.spotify ?? null,
+        });
+      }
     }
-  }
 
-  // Fallback: recently played
-  const recentRes = await fetch(RECENTLY_PLAYED_URL, { headers });
-  if (recentRes.status === 200) {
-    const data = await recentRes.json();
-    const track = data?.items?.[0]?.track;
-    if (track) {
-      return json({
-        isPlaying: false,
-        title: track.name,
-        artist: track.artists.map((a: { name: string }) => a.name).join(', '),
-        albumImageUrl: track.album.images[1]?.url ?? track.album.images[0]?.url,
-        songUrl: track.external_urls.spotify,
-      });
+    // Fallback: recently played
+    const recentRes = await fetch(RECENTLY_PLAYED_URL, { headers });
+    if (recentRes.status === 200) {
+      const data = await recentRes.json();
+      const track = data?.items?.[0]?.track;
+      if (track) {
+        return json({
+          isPlaying: false,
+          title: track.name ?? null,
+          artist: Array.isArray(track.artists)
+            ? track.artists.map((a: { name: string }) => a.name).join(', ')
+            : null,
+          albumImageUrl: track.album?.images?.[1]?.url ?? track.album?.images?.[0]?.url ?? null,
+          songUrl: track.external_urls?.spotify ?? null,
+        });
+      }
     }
-  }
 
-  return json({ isPlaying: false, title: null });
+    return json({ isPlaying: false, title: null });
+  } catch {
+    return new Response(JSON.stringify({ error: 'Spotify temporarily unavailable' }), {
+      status: 503,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
 }
 
 function json(data: unknown) {

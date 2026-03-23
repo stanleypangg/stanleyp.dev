@@ -1,6 +1,6 @@
 export const prerender = false;
 
-import { getArtistImage } from '../../lib/spotify';
+import { getArtistData } from '../../lib/spotify';
 
 async function getClientToken(clientId: string, clientSecret: string): Promise<string | null> {
   try {
@@ -37,7 +37,7 @@ export async function GET({ url }: { url: URL }) {
   }
 
   const entries = await Promise.all(
-    names.map(async (name) => [name, await getArtistImage(name, token)] as [string, string | null]),
+    names.map(async (name) => [name, await getArtistData(name, token)] as const),
   );
 
   return new Response(JSON.stringify(Object.fromEntries(entries)), {

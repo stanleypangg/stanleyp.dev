@@ -1,22 +1,29 @@
 ---
 import Layout from '../layouts/Layout.astro';
+const lfmUser = import.meta.env.PUBLIC_LASTFM_USERNAME;
 ---
 
 <Layout title="Listening — Stanley Pang" description="Music I've been listening to.">
   <header class="page-header">
     <h1 class="page-title">Listening history</h1>
+    <a
+      class="lfm-link"
+      href={`https://www.last.fm/user/${lfmUser}`}
+      target="_blank"
+      rel="noopener noreferrer"
+    >last.fm ↗</a>
   </header>
 
-  <hr class="rule" />
+  <div class="controls-spacer"></div>
 
   <!-- Controls: period + view toggle -->
-  <div class="toggle" role="group" aria-label="Controls" style="justify-content: space-between;">
-    <div style="display:flex;gap:1.5rem;" role="group" aria-label="Time period">
+  <div class="toggle controls-row" role="group" aria-label="Controls">
+    <div class="period-group" role="group" aria-label="Time period">
       <button class="toggle-btn active" data-period="7day">7 days</button>
       <button class="toggle-btn" data-period="1month">1 month</button>
       <button class="toggle-btn" data-period="overall">all time</button>
     </div>
-    <div style="display:flex;gap:1rem;" role="group" aria-label="View mode">
+    <div class="view-group" role="group" aria-label="View mode">
       <button class="toggle-btn active" data-view="grid">grid</button>
       <button class="toggle-btn" data-view="chart">chart</button>
     </div>
@@ -48,6 +55,18 @@ import Layout from '../layouts/Layout.astro';
 
   <hr class="rule" />
 
+  <!-- Top Tracks -->
+  <section id="section-top-tracks">
+    <span class="label">Top tracks</span>
+    <div class="track-list" id="top-tracks-list">
+      {Array.from({ length: 10 }).map(() => (
+        <div class="entry skeleton-row" />
+      ))}
+    </div>
+  </section>
+
+  <hr class="rule" />
+
   <!-- Recent Tracks -->
   <section id="section-tracks">
     <span class="label">Recent tracks</span>
@@ -65,17 +84,20 @@ import Layout from '../layouts/Layout.astro';
     try {
       var period = localStorage.getItem('music_last_period') || '7day';
 
-      var artistsHtml = localStorage.getItem('music_ui_artists_' + period);
-      var albumsHtml  = localStorage.getItem('music_ui_albums_'  + period);
-      var tracksHtml  = localStorage.getItem('music_ui_tracks');
+      var artistsHtml   = localStorage.getItem('music_ui_artists_' + period);
+      var albumsHtml    = localStorage.getItem('music_ui_albums_'  + period);
+      var topTracksHtml = localStorage.getItem('music_ui_toptracks_' + period);
+      var tracksHtml    = localStorage.getItem('music_ui_tracks');
 
-      var artistsEl = document.getElementById('artists-grid');
-      var albumsEl  = document.getElementById('albums-grid');
-      var tracksEl  = document.getElementById('track-list');
+      var artistsEl   = document.getElementById('artists-grid');
+      var albumsEl    = document.getElementById('albums-grid');
+      var topTracksEl = document.getElementById('top-tracks-list');
+      var tracksEl    = document.getElementById('track-list');
 
-      if (artistsEl && artistsHtml) artistsEl.innerHTML = artistsHtml;
-      if (albumsEl  && albumsHtml)  albumsEl.innerHTML  = albumsHtml;
-      if (tracksEl  && tracksHtml)  tracksEl.innerHTML  = tracksHtml;
+      if (artistsEl   && artistsHtml)   artistsEl.innerHTML   = artistsHtml;
+      if (albumsEl    && albumsHtml)     albumsEl.innerHTML    = albumsHtml;
+      if (topTracksEl && topTracksHtml)  topTracksEl.innerHTML = topTracksHtml;
+      if (tracksEl    && tracksHtml)     tracksEl.innerHTML    = tracksHtml;
 
       // Restore period toggle active state
       if (period !== '7day') {
@@ -88,8 +110,9 @@ import Layout from '../layouts/Layout.astro';
 </script>
 
 <script>
-  import { getTopArtists, getTopAlbums, getRecentTracks } from '../lib/lastfm';
-  import type { Period, ArtistStat, AlbumStat, Track } from '../lib/lastfm';
+  import { getTopArtists, getTopAlbums, getTopTracks, getRecentTracks } from '../lib/lastfm';
+  import type { Period, ArtistStat, AlbumStat, TrackStat, Track } from '../lib/lastfm';
+  import { esc, formatPlaycount, formatTimestamp } from '../lib/music-utils';
 
   const API_KEY = import.meta.env.PUBLIC_LASTFM_API_KEY;
   const USERNAME = import.meta.env.PUBLIC_LASTFM_USERNAME;
@@ -101,10 +124,13 @@ import Layout from '../layouts/Layout.astro';
   };
 
   interface CacheEntry<T> { data: T; ts: number }
+  interface ArtistData { imageUrl: string | null; spotifyUrl: string | null; }
+
   interface PeriodData {
-    artists: ArtistStat[];
-    albums:  AlbumStat[];
-    images:  Record<string, string | null>;
+    artists:    ArtistStat[];
+    albums:     AlbumStat[];
+    images:     Record<string, ArtistData>;
+    topTracks:  TrackStat[];
   }
 
   function cacheGet<T>(key: string, ttl: number): T | null {
@@ -124,40 +150,18 @@ import Layout from '../layouts/Layout.astro';
   }
 
   // ── Render helpers ────────────────────────────────────────────────────────
-  function esc(s: string): string {
-    return s
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-  }
-
-  function formatPlaycount(n: number): string {
-    return n.toLocaleString() + ' plays';
-  }
-
-  function formatTimestamp(ts: number | null): string {
-    if (ts === null) return 'now playing';
-    const d = new Date(ts * 1000);
-    const diff = Date.now() - d.getTime();
-    const mins = Math.floor(diff / 60_000);
-    if (mins < 60) return `${mins}m ago`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours}h ago`;
-    return `${Math.floor(hours / 24)}d ago`;
-  }
-
-  function renderArtists(artists: ArtistStat[], images: Map<string, string | null>) {
+  function renderArtists(artists: ArtistStat[], images: Map<string, ArtistData>) {
     const grid = document.getElementById('artists-grid')!;
     grid.classList.remove('chart-view');
     grid.innerHTML = artists.map((a) => {
-      const imgUrl = images.get(a.name);
-      const imgEl = imgUrl
-        ? `<img src="${esc(imgUrl)}" alt="${esc(a.name)}" loading="lazy" />`
+      const data = images.get(a.name);
+      const imgEl = data?.imageUrl
+        ? `<img src="${esc(data.imageUrl)}" alt="${esc(a.name)}" loading="lazy" />`
         : `<div class="img-placeholder" aria-hidden="true"></div>`;
+      const href = data?.spotifyUrl ?? a.url;
       return `
         <div class="grid-item">
-          <a href="${esc(a.url)}" target="_blank" rel="noopener noreferrer">
+          <a href="${esc(href)}" target="_blank" rel="noopener noreferrer">
             ${imgEl}
             <div class="item-overlay">
               <span class="item-name">${esc(a.name)}</span>
@@ -189,11 +193,11 @@ import Layout from '../layouts/Layout.astro';
   }
 
   function animateBars(grid: HTMLElement) {
-    // Double rAF: first ensures elements are in DOM, second ensures initial width:0 is painted
+    // Double rAF: first ensures elements are in DOM, second ensures initial scaleY(0) is painted
     requestAnimationFrame(() => requestAnimationFrame(() => {
-      grid.querySelectorAll<HTMLElement>('.chart-bar').forEach((bar, i) => {
-        bar.style.transitionDelay = `${i * 40}ms`;
-        bar.style.width = bar.dataset.pct + '%';
+      grid.querySelectorAll<HTMLElement>('.vchart-bar').forEach((bar, i) => {
+        bar.style.transitionDelay = `${i * 50}ms`;
+        bar.style.transform = 'scaleY(1)';
       });
     }));
   }
@@ -202,14 +206,23 @@ import Layout from '../layouts/Layout.astro';
     const grid = document.getElementById('artists-grid')!;
     grid.classList.add('chart-view');
     const max = artists[0]?.playcount ?? 1;
-    grid.innerHTML = artists.map((a) => `
-      <div class="chart-row">
-        <span class="chart-label">${esc(a.name)}</span>
-        <div class="chart-track">
-          <div class="chart-bar" data-pct="${(a.playcount / max) * 100}"></div>
-        </div>
-        <span class="chart-count">${a.playcount.toLocaleString()}</span>
-      </div>`).join('');
+    const images = new Map(Object.entries(lastImages));
+    grid.innerHTML = `<div class="vchart">${artists.map((a) => {
+      const pct = (a.playcount / max) * 100;
+      const data = images.get(a.name);
+      const imgEl = data?.imageUrl
+        ? `<img src="${esc(data.imageUrl)}" alt="" width="44" height="44" loading="lazy" />`
+        : `<div class="vchart-img-placeholder"></div>`;
+      return `
+        <div class="vchart-col">
+          <span class="vchart-count">${a.playcount.toLocaleString()}</span>
+          <div class="vchart-bar-area">
+            <div class="vchart-bar" style="height:${pct}%"></div>
+          </div>
+          <div class="vchart-img">${imgEl}</div>
+          <span class="vchart-name" title="${esc(a.name)}">${esc(a.name)}</span>
+        </div>`;
+    }).join('')}</div>`;
     animateBars(grid);
   }
 
@@ -217,26 +230,55 @@ import Layout from '../layouts/Layout.astro';
     const grid = document.getElementById('albums-grid')!;
     grid.classList.add('chart-view');
     const max = albums[0]?.playcount ?? 1;
-    grid.innerHTML = albums.map((a) => `
-      <div class="chart-row">
-        <span class="chart-label">${esc(a.name)}<br><span class="chart-sublabel">${esc(a.artist)}</span></span>
-        <div class="chart-track">
-          <div class="chart-bar" data-pct="${(a.playcount / max) * 100}"></div>
-        </div>
-        <span class="chart-count">${a.playcount.toLocaleString()}</span>
-      </div>`).join('');
+    grid.innerHTML = `<div class="vchart">${albums.map((a) => {
+      const pct = (a.playcount / max) * 100;
+      const imgEl = a.imageUrl
+        ? `<img src="${esc(a.imageUrl)}" alt="" width="44" height="44" loading="lazy" />`
+        : `<div class="vchart-img-placeholder"></div>`;
+      return `
+        <div class="vchart-col">
+          <span class="vchart-count">${a.playcount.toLocaleString()}</span>
+          <div class="vchart-bar-area">
+            <div class="vchart-bar" style="height:${pct}%"></div>
+          </div>
+          <div class="vchart-img">${imgEl}</div>
+          <span class="vchart-name" title="${esc(a.name)}">${esc(a.name)}</span>
+        </div>`;
+    }).join('')}</div>`;
     animateBars(grid);
   }
 
   function renderTracks(tracks: Track[]) {
     const list = document.getElementById('track-list')!;
-    list.innerHTML = tracks.map((t) => `
-      <div class="entry">
+    list.innerHTML = tracks.map((t) => {
+      const isNow = t.timestamp === null;
+      const metaEl = isNow
+        ? `<span class="track-live-wave" aria-label="Now playing">
+             <span class="track-live-bar"></span><span class="track-live-bar"></span>
+             <span class="track-live-bar"></span><span class="track-live-bar"></span>
+           </span>`
+        : `<span class="entry-meta">${formatTimestamp(t.timestamp)}</span>`;
+      return `
+        <div class="entry">
+          <span class="entry-title">
+            <a href="${esc(t.url)}" target="_blank" rel="noopener noreferrer" class="link">${esc(t.name)}</a>
+            <span class="entry-sub"> · ${esc(t.artist)}</span>
+          </span>
+          ${metaEl}
+        </div>`;
+    }).join('');
+  }
+
+  function renderTopTracks(tracks: TrackStat[]) {
+    const list = document.getElementById('top-tracks-list')!;
+    list.innerHTML = tracks.map((t, i) => `
+      <div class="entry entry--ranked">
+        <span class="entry-rank" aria-hidden="true">${String(i + 1).padStart(2, '0')}</span>
         <span class="entry-title">
           <a href="${esc(t.url)}" target="_blank" rel="noopener noreferrer" class="link">${esc(t.name)}</a>
-          <span class="entry-sub">${esc(t.artist)}</span>
+          <span class="entry-sub"> · ${esc(t.artist)}</span>
         </span>
-        <span class="entry-meta">${formatTimestamp(t.timestamp)}</span>
+        <span class="entry-meta">${formatPlaycount(t.playcount)}</span>
       </div>`).join('');
   }
 
@@ -262,23 +304,32 @@ import Layout from '../layouts/Layout.astro';
     } catch { /* quota exceeded */ }
   }
 
+  function saveTopTracksHtml(period: Period): void {
+    try {
+      const el = document.getElementById('top-tracks-list');
+      if (el) localStorage.setItem(`music_ui_toptracks_${period}`, el.innerHTML);
+    } catch { /* quota exceeded */ }
+  }
+
   // ── State — reset by init() on every navigation ───────────────────────────
   let currentPeriod: Period = '7day';
   let viewMode: 'grid' | 'chart' = 'grid';
 
   // Last successfully loaded data — used for instant re-render on view toggle
-  let lastArtists: ArtistStat[] = [];
-  let lastImages: Record<string, string | null> = {};
-  let lastAlbums:  AlbumStat[]  = [];
+  let lastArtists:   ArtistStat[] = [];
+  let lastImages:    Record<string, ArtistData> = {};
+  let lastAlbums:    AlbumStat[]  = [];
+  let lastTopTracks: TrackStat[]  = [];
 
   async function loadPeriodData(period: Period) {
     // Serve from cache immediately if fresh
-    const cacheKey = `music_period_${period}`;
+    const cacheKey = `music_period_v3_${period}`;
     const cached = cacheGet<PeriodData>(cacheKey, TTL.period);
     if (cached) {
-      lastArtists = cached.artists;
-      lastImages  = cached.images;
-      lastAlbums  = cached.albums;
+      lastArtists   = cached.artists;
+      lastImages    = cached.images;
+      lastAlbums    = cached.albums;
+      lastTopTracks = cached.topTracks ?? [];
       if (viewMode === 'chart') {
         renderArtistsChart(cached.artists);
         renderAlbumsChart(cached.albums);
@@ -294,13 +345,18 @@ import Layout from '../layouts/Layout.astro';
           renderAlbums(cached.albums);
           saveGridHtml('albums', period);
         }
+        if (cached.topTracks) {
+          renderTopTracks(cached.topTracks);
+          saveTopTracksHtml(period);
+        }
       }
       return;
     }
 
-    const [artistsResult, albumsResult] = await Promise.allSettled([
+    const [artistsResult, albumsResult, topTracksResult] = await Promise.allSettled([
       getTopArtists(period, 10, API_KEY, USERNAME),
       getTopAlbums(period, 10, API_KEY, USERNAME),
+      getTopTracks(period, 10, API_KEY, USERNAME),
     ]);
 
     // Albums have their own images from Last.fm — render immediately
@@ -316,16 +372,24 @@ import Layout from '../layouts/Layout.astro';
       showError('section-albums');
     }
 
+    if (topTracksResult.status === 'fulfilled') {
+      lastTopTracks = topTracksResult.value;
+      renderTopTracks(topTracksResult.value);
+      saveTopTracksHtml(period);
+    } else {
+      showError('section-top-tracks');
+    }
+
     if (artistsResult.status === 'fulfilled') {
       const artists = artistsResult.value;
 
       // One batched server-side call instead of 10 client→Spotify calls.
       // The server caches results at the CDN layer (s-maxage=3600).
-      let images: Record<string, string | null> = {};
+      let images: Record<string, ArtistData> = {};
       try {
         const params = new URLSearchParams(artists.map((a) => ['names', a.name] as [string, string]));
         const res = await fetch(`/api/artist-images?${params}`);
-        if (res.ok) images = await res.json() as Record<string, string | null>;
+        if (res.ok) images = await res.json() as Record<string, ArtistData>;
       } catch { /* images are non-critical */ }
 
       lastArtists = artists;
@@ -338,8 +402,8 @@ import Layout from '../layouts/Layout.astro';
         saveGridHtml('artists', period);
       }
 
-      if (albumsResult.status === 'fulfilled') {
-        cacheSet<PeriodData>(cacheKey, { artists, albums: albumsResult.value, images });
+      if (albumsResult.status === 'fulfilled' && topTracksResult.status === 'fulfilled') {
+        cacheSet<PeriodData>(cacheKey, { artists, albums: albumsResult.value, images, topTracks: topTracksResult.value });
       }
     } else {
       showError('section-artists');
@@ -372,9 +436,10 @@ import Layout from '../layouts/Layout.astro';
       try { return (localStorage.getItem('music_last_period') as Period) || '7day'; } catch { return '7day'; }
     })();
     viewMode = 'grid';
-    lastArtists = [];
-    lastImages  = {};
-    lastAlbums  = [];
+    lastArtists   = [];
+    lastImages    = {};
+    lastAlbums    = [];
+    lastTopTracks = [];
 
     // ── Period toggle ──────────────────────────────────────────────────────
     document.querySelectorAll<HTMLButtonElement>('.toggle-btn').forEach((btn) => {
@@ -391,18 +456,25 @@ import Layout from '../layouts/Layout.astro';
         const artistsGrid = document.getElementById('artists-grid')!;
         const albumsGrid = document.getElementById('albums-grid')!;
         if (viewMode === 'chart') {
+          const skeletonHeights = [100, 78, 65, 55, 47, 40, 34, 29, 25, 21];
+          const vchartSkeleton = `<div class="vchart">${skeletonHeights.map((h) => `
+            <div class="vchart-col">
+              <span class="vchart-count" style="width:1.5rem;height:0.6rem;background:var(--subtle);border-radius:2px;display:block"></span>
+              <div class="vchart-bar-area">
+                <div class="vchart-bar" style="height:${h}%;background:var(--subtle);transform:scaleY(1);transition:none"></div>
+              </div>
+              <div class="vchart-img" style="background:var(--subtle)"></div>
+              <span class="vchart-name" style="width:70%;height:0.5rem;background:var(--subtle);border-radius:2px;display:block"></span>
+            </div>`).join('')}</div>`;
           artistsGrid.classList.add('chart-view');
-          artistsGrid.innerHTML = Array.from({ length: 10 }, () =>
-            `<div class="chart-row">
-              <span class="chart-label" style="background:var(--subtle);height:0.75rem;border-radius:2px"></span>
-              <div class="chart-track"><div class="chart-bar" style="width:60%"></div></div>
-              <span class="chart-count" style="background:var(--subtle);width:2rem;height:0.75rem;border-radius:2px"></span>
-            </div>`).join('');
+          artistsGrid.innerHTML = vchartSkeleton;
           albumsGrid.classList.add('chart-view');
-          albumsGrid.innerHTML = artistsGrid.innerHTML;
+          albumsGrid.innerHTML = vchartSkeleton;
         } else {
           artistsGrid.innerHTML = Array.from({ length: 10 }, () => '<div class="grid-item skeleton"></div>').join('');
           albumsGrid.innerHTML  = Array.from({ length: 10 }, () => '<div class="grid-item skeleton"></div>').join('');
+          const topTracksList = document.getElementById('top-tracks-list')!;
+          topTracksList.innerHTML = Array.from({ length: 10 }, () => '<div class="entry skeleton-row"></div>').join('');
         }
 
         await loadPeriodData(period);
@@ -438,13 +510,30 @@ import Layout from '../layouts/Layout.astro';
     ]);
   }
 
-  // astro:page-load fires on first load AND on every View Transition navigation
+  // astro:page-load fires on first load AND after every View Transition.
+  // View Transitions replace DOM elements, so init() must re-bind event handlers
+  // to the fresh elements on each navigation.
   document.addEventListener('astro:page-load', init);
 </script>
 
 <style>
   .page-header {
     margin-bottom: 0;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .lfm-link {
+    font-size: var(--text-xs);
+    color: var(--muted);
+    letter-spacing: 0.04em;
+    transition: color 250ms;
+  }
+
+  .lfm-link:hover {
+    color: var(--fg);
   }
 
   .page-title {
@@ -453,6 +542,21 @@ import Layout from '../layouts/Layout.astro';
     font-optical-sizing: auto;
     font-size: var(--text-lg);
     letter-spacing: -0.01em;
+  }
+
+  /* Controls layout */
+  .controls-spacer { margin-top: 1.5rem; }
+
+  .controls-row { justify-content: space-between; }
+
+  .period-group {
+    display: flex;
+    gap: 1.5rem;
+  }
+
+  .view-group {
+    display: flex;
+    gap: 1rem;
   }
 
   /* Period toggle */
@@ -522,8 +626,8 @@ import Layout from '../layouts/Layout.astro';
     bottom: 0;
     left: 0;
     right: 0;
-    padding: 1.75rem 0.625rem 0.5rem;
-    background: linear-gradient(to top, rgba(0, 0, 0, 0.85) 0%, rgba(0, 0, 0, 0) 100%);
+    padding: 2.5rem 0.625rem 0.5rem;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.96) 0%, rgba(0, 0, 0, 0.5) 50%, rgba(0, 0, 0, 0) 100%);
     pointer-events: none;
   }
 
@@ -532,13 +636,19 @@ import Layout from '../layouts/Layout.astro';
     font-size: var(--text-xs);
     color: #fff;
     line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   :global(.item-meta) {
     display: block;
     font-size: var(--text-2xs);
-    color: rgba(255, 255, 255, 0.58);
+    color: rgba(255, 255, 255, 0.72);
     margin-top: 0.1rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   /* Track list */
@@ -546,6 +656,10 @@ import Layout from '../layouts/Layout.astro';
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
+  }
+
+  :global(.track-list .entry-sub) {
+    font-size: var(--text-xs);
   }
 
   /* Skeleton — :global() so JS-injected skeletons (period toggle) also get styled */
@@ -581,56 +695,90 @@ import Layout from '../layouts/Layout.astro';
   /* :global() required: chart elements are injected via innerHTML, not in the Astro template,
      so they don't receive the scoped data-astro-cid attribute. */
   :global(.grid.chart-view) {
+    display: block;
+  }
+
+  /* Vertical bar chart container */
+  :global(.vchart) {
+    display: flex;
+    align-items: stretch;
+    gap: clamp(0.25rem, 1.2vw, 0.625rem);
+    height: 260px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  :global(.vchart-col) {
+    flex: 1;
+    min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 0;
-  }
-
-  /* Chart rows */
-  :global(.chart-row) {
-    display: grid;
-    grid-template-columns: 120px 1fr auto;
     align-items: center;
-    gap: 0.75rem;
-    padding: 0.3rem 0;
   }
 
-  :global(.chart-label) {
-    font-size: var(--text-xs);
-    color: var(--fg);
-    text-align: right;
-    line-height: 1.3;
-  }
-
-  :global(.chart-sublabel) {
-    font-size: var(--text-2xs);
-    color: var(--muted);
-  }
-
-  :global(.chart-track) {
-    height: 4px;
-    background: var(--subtle);
-    border-radius: 2px;
-    overflow: hidden;
-  }
-
-  :global(.chart-bar) {
-    height: 100%;
-    width: 0;
-    background: var(--fg);
-    border-radius: 2px;
-    transition: width 600ms cubic-bezier(0.16, 1, 0.3, 1);
-  }
-
-  :global(.chart-count) {
+  :global(.vchart-count) {
     font-size: var(--text-2xs);
     color: var(--muted);
     white-space: nowrap;
+    flex-shrink: 0;
+    margin-bottom: 0.5rem;
+    line-height: 1;
+  }
+
+  :global(.vchart-bar-area) {
+    flex: 1;
+    width: 100%;
+    max-width: 44px;
+    display: flex;
+    align-items: flex-end;
+  }
+
+  :global(.vchart-bar) {
+    width: 100%;
+    background: color-mix(in oklch, var(--fg) 60%, var(--bg));
+    border-radius: 2px 2px 0 0;
+    transform: scaleY(0);
+    transform-origin: bottom;
+    transition: transform 600ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  :global(.vchart-img) {
+    width: 44px;
+    height: 44px;
+    border-radius: 2px;
+    overflow: hidden;
+    flex-shrink: 0;
+    margin-top: 0.375rem;
+  }
+
+  :global(.vchart-img img) {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  :global(.vchart-img-placeholder) {
+    width: 100%;
+    height: 100%;
+    background: var(--subtle);
+  }
+
+  :global(.vchart-name) {
+    font-size: var(--text-2xs);
+    color: var(--muted);
+    text-align: center;
+    margin-top: 0.25rem;
+    width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-shrink: 0;
   }
 
   @media (prefers-reduced-motion: reduce) {
-    :global(.chart-bar) {
+    :global(.vchart-bar) {
       transition: none;
+      transform: scaleY(1);
     }
   }
 
@@ -639,6 +787,107 @@ import Layout from '../layouts/Layout.astro';
   [data-view].toggle-btn:hover,
   [data-view].toggle-btn.active {
     padding-left: 0;
+  }
+
+  /* ── Mobile layout ──────────────────────────────────────────────────────── */
+  @media (max-width: 600px) {
+    /* 2-column image grid (10 items → 5 rows) */
+    .grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+
+    /* Smaller images and chart height on mobile */
+    :global(.vchart) {
+      height: 200px;
+    }
+
+    :global(.vchart-bar-area) {
+      max-width: 36px;
+    }
+
+    :global(.vchart-img) {
+      width: 36px;
+      height: 36px;
+    }
+
+    :global(.vchart-count) {
+      font-size: 0.5rem;
+    }
+  }
+
+  /* ── Numbered chart ranks (top tracks) ──────────────────────────────────── */
+  :global(.entry--ranked) {
+    gap: 0.75rem;
+  }
+
+  :global(.entry--ranked .entry-title) {
+    flex: 1;
+    min-width: 0;
+  }
+
+  :global(.entry-rank) {
+    font-size: var(--text-2xs);
+    color: var(--fg);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.04em;
+    flex-shrink: 0;
+    width: 1.25rem;
+    text-align: left;
+    align-self: center;
+  }
+
+  /* ── Track row hover indent — mirrors toggle-btn / elsewhere-link pattern ─ */
+  :global(.track-list .entry) {
+    transition: padding-left 500ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  :global(.track-list .entry:hover) {
+    padding-left: 0.35rem;
+  }
+
+  /* ── Now-playing soundwave in recent tracks ─────────────────────────────── */
+  :global(.track-live-wave) {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 14px;
+    flex-shrink: 0;
+  }
+
+  :global(.track-live-bar) {
+    width: 2px;
+    border-radius: 1px;
+    background: var(--muted);
+    height: 3px;
+    transform-origin: bottom;
+    animation: track-soundwave 1.4s ease-in-out infinite;
+  }
+
+  :global(.track-live-bar:nth-child(1)) { animation-duration: 1.1s; animation-delay: -0.3s; }
+  :global(.track-live-bar:nth-child(2)) { animation-duration: 0.8s; animation-delay: -0.7s; }
+  :global(.track-live-bar:nth-child(3)) { animation-duration: 1.4s; animation-delay: -0.1s; }
+  :global(.track-live-bar:nth-child(4)) { animation-duration: 1.0s; animation-delay: -0.5s; }
+
+  @keyframes track-soundwave {
+    0%   { height: 3px;  }
+    20%  { height: 14px; }
+    40%  { height: 5px;  }
+    60%  { height: 11px; }
+    80%  { height: 4px;  }
+    100% { height: 3px;  }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :global(.track-list .entry) {
+      transition: none;
+    }
+    :global(.track-list .entry:hover) {
+      padding-left: 0;
+    }
+    :global(.track-live-bar) {
+      animation: none;
+      height: 10px;
+    }
   }
 </style>
 </Layout>
