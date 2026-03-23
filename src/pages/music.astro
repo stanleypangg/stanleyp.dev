@@ -158,10 +158,10 @@ import Layout from '../layouts/Layout.astro';
     grid.classList.add('chart-view');
     const max = artists[0]?.playcount ?? 1;
     grid.innerHTML = artists.map((a, i) => `
-      <div class="chart-row" style="--delay:${i * 40}ms">
+      <div class="chart-row">
         <span class="chart-label">${esc(a.name)}</span>
         <div class="chart-track">
-          <div class="chart-bar" style="--pct:${(a.playcount / max) * 100}%"></div>
+          <div class="chart-bar" style="width:${(a.playcount / max) * 100}%;animation-delay:${i * 40}ms"></div>
         </div>
         <span class="chart-count">${a.playcount.toLocaleString()}</span>
       </div>`).join('');
@@ -172,10 +172,10 @@ import Layout from '../layouts/Layout.astro';
     grid.classList.add('chart-view');
     const max = albums[0]?.playcount ?? 1;
     grid.innerHTML = albums.map((a, i) => `
-      <div class="chart-row" style="--delay:${i * 40}ms">
+      <div class="chart-row">
         <span class="chart-label">${esc(a.name)}<br><span class="chart-sublabel">${esc(a.artist)}</span></span>
         <div class="chart-track">
-          <div class="chart-bar" style="--pct:${(a.playcount / max) * 100}%"></div>
+          <div class="chart-bar" style="width:${(a.playcount / max) * 100}%;animation-delay:${i * 40}ms"></div>
         </div>
         <span class="chart-count">${a.playcount.toLocaleString()}</span>
       </div>`).join('');
@@ -503,13 +503,11 @@ import Layout from '../layouts/Layout.astro';
 
   :global(.chart-bar) {
     height: 100%;
-    width: var(--pct);
     background: var(--fg);
     border-radius: 2px;
     transform: scaleX(0);
     transform-origin: left;
     animation: bar-grow 600ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
-    animation-delay: var(--delay, 0ms);
   }
 
   @keyframes bar-grow {
@@ -525,8 +523,8 @@ import Layout from '../layouts/Layout.astro';
 
   @media (prefers-reduced-motion: reduce) {
     :global(.chart-bar) {
-      animation: none;
-      transform: scaleX(1);
+      animation: none !important;
+      transform: scaleX(1) !important;
     }
   }
 
