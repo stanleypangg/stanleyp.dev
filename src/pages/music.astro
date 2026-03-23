@@ -324,10 +324,42 @@ import Layout from '../layouts/Layout.astro';
       // Re-render skeletons for period-dependent sections only
       const artistsGrid = document.getElementById('artists-grid')!;
       const albumsGrid = document.getElementById('albums-grid')!;
-      artistsGrid.innerHTML = Array.from({ length: 10 }, () => '<div class="grid-item skeleton"></div>').join('');
-      albumsGrid.innerHTML  = Array.from({ length: 10 }, () => '<div class="grid-item skeleton"></div>').join('');
+      if (viewMode === 'chart') {
+        artistsGrid.classList.add('chart-view');
+        artistsGrid.innerHTML = Array.from({ length: 10 }, (_, i) =>
+          `<div class="chart-row" style="--delay:${i * 40}ms">
+            <span class="chart-label" style="background:var(--subtle);height:0.75rem;border-radius:2px"></span>
+            <div class="chart-track"><div class="chart-bar" style="--pct:60%"></div></div>
+            <span class="chart-count" style="background:var(--subtle);width:2rem;height:0.75rem;border-radius:2px"></span>
+          </div>`).join('');
+        albumsGrid.classList.add('chart-view');
+        albumsGrid.innerHTML = artistsGrid.innerHTML;
+      } else {
+        artistsGrid.innerHTML = Array.from({ length: 10 }, () => '<div class="grid-item skeleton"></div>').join('');
+        albumsGrid.innerHTML  = Array.from({ length: 10 }, () => '<div class="grid-item skeleton"></div>').join('');
+      }
 
       await loadPeriodData(period);
+    });
+  });
+
+  // ── View toggle ───────────────────────────────────────────────────────────
+  document.querySelectorAll<HTMLButtonElement>('[data-view]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const mode = btn.dataset.view as 'grid' | 'chart';
+      if (mode === viewMode) return;
+      viewMode = mode;
+
+      document.querySelectorAll('[data-view]').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+
+      if (viewMode === 'chart') {
+        renderArtistsChart(lastArtists);
+        renderAlbumsChart(lastAlbums);
+      } else {
+        renderArtists(lastArtists, new Map(Object.entries(lastImages)));
+        renderAlbums(lastAlbums);
+      }
     });
   });
 
