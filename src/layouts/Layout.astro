@@ -15,9 +15,10 @@ const {
 
 const pathname = Astro.url.pathname;
 const lastUpdated = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-const isWork    = pathname.startsWith('/work');
-const isWriting = pathname.startsWith('/writing');
-const isMusic   = pathname.startsWith('/music');
+const isProjects = pathname.startsWith('/projects');
+const isWriting  = pathname.startsWith('/writing');
+const isMusic    = pathname.startsWith('/music');
+const isPictures = pathname.startsWith('/pictures');
 ---
 
 <!doctype html>
@@ -62,10 +63,10 @@ const isMusic   = pathname.startsWith('/music');
           <ul class="nav-links">
             <li>
               <a
-                href="/work"
+                href="/projects"
                 class="nav-link"
-                aria-current={isWork ? 'page' : undefined}
-              >work</a>
+                aria-current={isProjects ? 'page' : undefined}
+              >projects</a>
             </li>
             <li>
               <a
@@ -80,6 +81,13 @@ const isMusic   = pathname.startsWith('/music');
                 class="nav-link"
                 aria-current={isMusic ? 'page' : undefined}
               >music</a>
+            </li>
+            <li>
+              <a
+                href="/pictures"
+                class="nav-link"
+                aria-current={isPictures ? 'page' : undefined}
+              >pictures</a>
             </li>
             <li>
               <ThemeToggle />
@@ -97,6 +105,7 @@ const isMusic   = pathname.startsWith('/music');
           <li><a href="#" class="elsewhere-link">GitHub</a></li>
           <li><a href="#" class="elsewhere-link">LinkedIn</a></li>
           <li><a href="#" class="elsewhere-link">Email</a></li>
+          <li><a href="https://x.com/stanleypangg" target="_blank" rel="noopener noreferrer" class="elsewhere-link">X</a></li>
         </ul>
         <span class="footer-updated">Updated {lastUpdated}</span>
       </footer>
