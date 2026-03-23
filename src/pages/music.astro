@@ -172,6 +172,12 @@ import Layout from '../layouts/Layout.astro';
 
   // ── Main load ─────────────────────────────────────────────────────────────
   let currentPeriod: Period = '7day';
+  let viewMode: 'grid' | 'chart' = 'grid';
+
+  // Last successfully loaded data — used for instant re-render on view toggle
+  let lastArtists: ArtistStat[] = [];
+  let lastImages: Record<string, string | null> = {};
+  let lastAlbums:  AlbumStat[]  = [];
 
   async function loadPeriodData(period: Period) {
     // Serve from cache immediately if fresh
@@ -256,12 +262,13 @@ import Layout from '../layouts/Layout.astro';
   // ── Toggle ────────────────────────────────────────────────────────────────
   document.querySelectorAll<HTMLButtonElement>('.toggle-btn').forEach((btn) => {
     btn.addEventListener('click', async () => {
+      if (!btn.dataset.period) return;   // ignore view buttons
       const period = btn.dataset.period as Period;
       if (period === currentPeriod) return;
       currentPeriod = period;
 
       // Update active state
-      document.querySelectorAll('.toggle-btn').forEach((b) => b.classList.remove('active'));
+      document.querySelectorAll('[data-period]').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
 
       // Re-render skeletons for period-dependent sections only
