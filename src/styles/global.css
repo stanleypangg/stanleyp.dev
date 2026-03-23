@@ -1,18 +1,18 @@
 /* ── Color tokens ──────────────────────────────────────────── */
 :root {
-  --bg:      oklch(97.5% 0.004 80);
-  --fg:      oklch(13%   0.004 80);
-  --muted:   oklch(52%   0.003 80);
-  --subtle:  oklch(72%   0.003 80);
-  --border:  oklch(88%   0.003 80);
-  --dot:     oklch(83%   0.003 80);
+  --bg:      oklch(97.5% 0.004  80);
+  --fg:      oklch(13%   0.004  80);
+  --muted:   oklch(45%   0.003  80);  /* ↓52%→45%: WCAG AA for normal text (~4.8:1) */
+  --subtle:  oklch(57%   0.003  80);  /* ↓72%→57%: legible secondary text (~3.1:1) */
+  --border:  oklch(88%   0.003  80);
+  --dot:     oklch(83%   0.003  80);
 }
 
 :root.dark {
   --bg:      oklch(10.5% 0.003 260);
   --fg:      oklch(93%   0.004  80);
-  --muted:   oklch(54%   0.003  80);
-  --subtle:  oklch(35%   0.003 260);
+  --muted:   oklch(67%   0.003  80);  /* secondary text — ~7.6:1 against dark bg */
+  --subtle:  oklch(63%   0.003  80);  /* tertiary text  — ~6.5:1 against dark bg; warm hue matches fg/muted */
   --border:  oklch(20%   0.003 260);
   --dot:     oklch(17%   0.003 260);
 }
@@ -44,22 +44,40 @@
 }
 
 html {
+  /* Light mode: subpixel antialiasing renders dark-on-light text with better weight */
+  -webkit-font-smoothing: subpixel-antialiased;
+  -moz-osx-font-smoothing: auto;
+  text-rendering: optimizeLegibility;
+}
+
+/* Dark mode: grayscale antialiasing is correct for light-on-dark */
+html.dark {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
 }
 
 body {
   background-color: var(--bg);
-  background-image: radial-gradient(var(--dot) 1px, transparent 1px);
-  background-size: 28px 28px;
   color: var(--fg);
   font-family: var(--font-text);
+  font-optical-sizing: auto;
   font-weight: 300;
   font-size: var(--text-base);
   line-height: 1.75;
   min-height: 100dvh;
   transition: background-color 300ms, color 300ms;
+}
+
+
+/* Dot grid canvas — replaces the CSS radial-gradient background */
+#bg-dots {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+  display: block;
 }
 
 body::after {
@@ -106,19 +124,25 @@ img, video {
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
+  position: relative;
+  z-index: 1;
 }
 
 /* ── Site nav ──────────────────────────────────────────────── */
 .site-nav {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background-color: var(--bg);
   padding-block: 1.25rem 1rem;
   border-bottom: 1px solid var(--border);
   margin-bottom: 2rem;
+  transition: background-color 300ms;
 }
 
 .nav-inner {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 1.5rem;
 }
 
@@ -156,23 +180,42 @@ img, video {
   align-items: center;
   gap: 1.5rem;
   list-style: none;
+  margin-left: auto; /* push links + toggle to the right */
 }
 
-/* Nav link with indent-on-hover (martinsit.ca pattern) */
+/* Nav link */
 .nav-link {
   font-size: var(--text-xs);
   color: var(--muted);
   letter-spacing: 0.05em;
   text-transform: lowercase;
-  display: inline-block;
-  transition:
-    color 250ms,
-    padding-left 500ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition: color 250ms;
 }
 .nav-link:hover,
 .nav-link[aria-current="page"] {
   color: var(--fg);
-  padding-left: 0.4rem;
+}
+
+/* ── Nav: two-row layout on small screens ──────────────────── */
+@media (max-width: 480px) {
+  .nav-inner {
+    flex-wrap: wrap;
+    row-gap: 0.75rem;
+  }
+
+  /* Toggle stays on row 1 with the logo, pushed to the right */
+  .nav-inner > .theme-btn {
+    margin-left: auto;
+  }
+
+  /* Links wrap to row 2, spanning full width */
+  .nav-links {
+    order: 3;
+    width: 100%;
+    margin-left: 0;
+    justify-content: space-between;
+    gap: 0;
+  }
 }
 
 /* ── Theme toggle ──────────────────────────────────────────── */
@@ -219,6 +262,11 @@ main {
   padding-bottom: 2rem;
   display: flex;
   flex-direction: column;
+}
+
+/* Pull subpage headers up to align with the homepage hero top edge */
+.page-header {
+  margin-top: -0.75rem;
 }
 
 /* ── Horizontal rule ───────────────────────────────────────── */
@@ -301,14 +349,6 @@ main {
   list-style: none;
 }
 
-.index-num {
-  font-size: var(--text-xs);
-  color: var(--subtle);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.04em;
-  margin-bottom: 0.2rem;
-}
-
 /* ── Empty state ───────────────────────────────────────────── */
 .empty {
   color: var(--muted);
@@ -369,6 +409,11 @@ main {
   to   { opacity: 0; translate: 0 -4px; }
 }
 
+@keyframes expand-tracking {
+  from { letter-spacing: 0.02em; }
+  to   { letter-spacing: 0.12em; }
+}
+
 ::view-transition-old(root) {
   animation: 160ms ease-in both vt-out;
 }
@@ -383,12 +428,9 @@ main {
   }
 
   /* Remove spatial transitions — keep color-only transitions */
-  .nav-link,
   .elsewhere-link {
     transition: color 250ms;
   }
-  .nav-link:hover,
-  .nav-link[aria-current="page"],
   .elsewhere-link:hover {
     padding-left: 0;
   }

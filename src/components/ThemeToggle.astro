@@ -25,6 +25,15 @@
     });
   }
 
+  // Apply theme to incoming document BEFORE the swap paints it
+  document.addEventListener('astro:before-swap', (e) => {
+    const stored = localStorage.getItem('theme');
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    if (stored === 'dark' || (!stored && prefersDark)) {
+      e.newDocument.documentElement.classList.add('dark');
+    }
+  });
+
   // Runs on initial page load and after every View Transition
   setup();
   document.addEventListener('astro:after-swap', () => {

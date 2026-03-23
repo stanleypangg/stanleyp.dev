@@ -1,6 +1,7 @@
 ---
 import { ViewTransitions } from 'astro:transitions';
 import ThemeToggle from '../components/ThemeToggle.astro';
+import WaveViz from '../components/WaveViz.astro';
 import '../styles/global.css';
 
 interface Props {
@@ -19,6 +20,7 @@ const isProjects = pathname.startsWith('/projects');
 const isWriting  = pathname.startsWith('/writing');
 const isMusic    = pathname.startsWith('/music');
 const isPictures = pathname.startsWith('/pictures');
+const isChat     = pathname.startsWith('/chat');
 ---
 
 <!doctype html>
@@ -35,7 +37,7 @@ const isPictures = pathname.startsWith('/pictures');
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=DM+Sans:opsz,wght@9..40,300;9..40,400&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=DM+Sans:opsz,wght@9..40,300..400&display=swap"
       rel="stylesheet"
     />
 
@@ -54,18 +56,22 @@ const isPictures = pathname.startsWith('/pictures');
 
     <!-- Console easter egg — for engineers who inspect -->
     <script is:inline>
-      if (!window.__greeted) {
-        window.__greeted = true;
+      (function () {
+        try {
+          if (sessionStorage.getItem('__greeted')) return;
+          sessionStorage.setItem('__greeted', '1');
+        } catch { return; }
         console.log(
           '%cStanley Pang\n%cBuilt with Astro · Inspecting the source? Good instinct.',
           'font-family: Georgia, serif; font-size: 1.1em; font-weight: 400;',
           'font-family: system-ui, sans-serif; font-size: 0.8em; font-weight: 300; color: #888;'
         );
-      }
+      })();
     </script>
   </head>
 
   <body>
+    <canvas id="bg-dots" aria-hidden="true"></canvas>
     <div class="wrap">
       <nav class="site-nav">
         <div class="nav-inner">
@@ -102,9 +108,14 @@ const isPictures = pathname.startsWith('/pictures');
               >pictures</a>
             </li>
             <li>
-              <ThemeToggle />
+              <a
+                href="/chat"
+                class="nav-link"
+                aria-current={isChat ? 'page' : undefined}
+              >chat</a>
             </li>
           </ul>
+          <ThemeToggle />
         </div>
       </nav>
 
@@ -112,15 +123,167 @@ const isPictures = pathname.startsWith('/pictures');
         <slot />
       </main>
 
+      <WaveViz />
+
       <footer class="site-footer">
-        <ul class="footer-links">
-          <li><a href="#" class="elsewhere-link">GitHub</a></li>
-          <li><a href="#" class="elsewhere-link">LinkedIn</a></li>
-          <li><a href="#" class="elsewhere-link">Email</a></li>
-          <li><a href="https://x.com/stanleypangg" target="_blank" rel="noopener noreferrer" class="elsewhere-link">X</a></li>
-        </ul>
         <span class="footer-updated">Updated {lastUpdated}</span>
       </footer>
     </div>
   </body>
+
+
+<script>
+  // ── Dot-grid canvas with cursor attraction ───────────────────────────
+  // View Transitions swap the <body>, so the canvas element is replaced
+  // on each navigation. We re-grab it via astro:after-swap while keeping
+  // mouse listeners and RAF state at module scope (added only once).
+
+  const SPACING  = 28;
+  const DOT_R    = 1;
+  const RADIUS   = 80;
+  const STRENGTH = 0.28;
+  const SPRING_K = 0.12;
+  const DAMPING  = 0.75;
+  const IDLE_EPS = 0.01;
+
+  type Dot = { hx: number; hy: number; x: number; y: number; vx: number; vy: number };
+
+  let canvas: HTMLCanvasElement | null = null;
+  let ctx: CanvasRenderingContext2D | null = null;
+  let dots: Dot[] = [];
+  let mouse = { x: -9999, y: -9999 };
+  let rafId = 0;
+  let rafRunning = false;
+  let dotColor = '';
+
+  const prefersReducedMotion =
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function readColor() {
+    dotColor = getComputedStyle(document.documentElement)
+      .getPropertyValue('--dot').trim();
+  }
+
+  function buildGrid() {
+    if (!canvas) return;
+    dots = [];
+    const ox = SPACING / 2;
+    const oy = SPACING / 2;
+    const cols = Math.ceil(canvas.width  / SPACING) + 2;
+    const rows = Math.ceil(canvas.height / SPACING) + 2;
+    for (let r = -1; r < rows; r++) {
+      for (let c = -1; c < cols; c++) {
+        const hx = ox + c * SPACING;
+        const hy = oy + r * SPACING;
+        dots.push({ hx, hy, x: hx, y: hy, vx: 0, vy: 0 });
+      }
+    }
+  }
+
+  function draw() {
+    if (!canvas || !ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = dotColor;
+    ctx.beginPath();
+    for (const d of dots) {
+      ctx.moveTo(d.x + DOT_R, d.y);
+      ctx.arc(d.x, d.y, DOT_R, 0, Math.PI * 2);
+    }
+    ctx.fill();
+  }
+
+  function tick() {
+    let anyActive = mouse.x > -1000;
+
+    for (const d of dots) {
+      const dx = mouse.x - d.hx;
+      const dy = mouse.y - d.hy;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      let tx = d.hx, ty = d.hy;
+      if (dist > 0 && dist < RADIUS) {
+        const falloff = 1 - dist / RADIUS;
+        tx = d.hx + dx * STRENGTH * falloff;
+        ty = d.hy + dy * STRENGTH * falloff;
+      }
+
+      d.vx = (d.vx + (tx - d.x) * SPRING_K) * DAMPING;
+      d.vy = (d.vy + (ty - d.y) * SPRING_K) * DAMPING;
+      d.x += d.vx;
+      d.y += d.vy;
+
+      if (!anyActive && (
+        Math.abs(d.vx) > IDLE_EPS || Math.abs(d.vy) > IDLE_EPS ||
+        Math.abs(d.x - d.hx) > IDLE_EPS || Math.abs(d.y - d.hy) > IDLE_EPS
+      )) anyActive = true;
+    }
+
+    draw();
+
+    if (anyActive) {
+      rafId = requestAnimationFrame(tick);
+    } else {
+      rafRunning = false;
+    }
+  }
+
+  function startTick() {
+    if (!rafRunning) {
+      rafRunning = true;
+      rafId = requestAnimationFrame(tick);
+    }
+  }
+
+  function resize() {
+    if (!canvas) return;
+    canvas.width  = window.innerWidth;
+    canvas.height = window.innerHeight;
+    buildGrid();
+    if (!rafRunning) draw();
+  }
+
+  // Called on first load AND after every View Transition swap
+  function attachCanvas() {
+    cancelAnimationFrame(rafId);
+    rafRunning = false;
+
+    canvas = document.getElementById('bg-dots') as HTMLCanvasElement | null;
+    if (!canvas) return;
+    ctx = canvas.getContext('2d');
+
+    readColor();
+    resize();
+
+    // Restart animation if cursor is already on the page
+    if (!prefersReducedMotion && mouse.x > -1000) startTick();
+  }
+
+  // Global listeners — added once, persist across View Transitions
+  window.addEventListener('resize', resize, { passive: true });
+
+  new MutationObserver(() => {
+    readColor();
+    if (!rafRunning) draw();
+  }).observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['class'],
+  });
+
+  if (!prefersReducedMotion) {
+    document.addEventListener('mousemove', (e: MouseEvent) => {
+      mouse.x = e.clientX;
+      mouse.y = e.clientY;
+      startTick();
+    }, { passive: true });
+
+    document.addEventListener('mouseleave', () => {
+      mouse.x = -9999;
+      mouse.y = -9999;
+    });
+  }
+
+  // Bootstrap
+  attachCanvas();
+  document.addEventListener('astro:after-swap', attachCanvas);
+</script>
 </html>
