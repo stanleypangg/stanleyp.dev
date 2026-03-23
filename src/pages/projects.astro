@@ -1,0 +1,134 @@
+---
+import Layout from '../layouts/Layout.astro';
+
+const projects = [
+  {
+    title: '[Project Name]',
+    year: '2024',
+    description:
+      '[One or two sentences about what this project does and what makes it interesting.]',
+    stack: ['TypeScript', 'React', 'PostgreSQL'],
+    links: { live: '#', github: '#' },
+  },
+  {
+    title: '[Project Name]',
+    year: '2024',
+    description:
+      '[One or two sentences about what this project does and what makes it interesting.]',
+    stack: ['Go', 'Redis', 'Docker'],
+    links: { github: '#' },
+  },
+  {
+    title: '[Project Name]',
+    year: '2023',
+    description:
+      '[One or two sentences about what this project does and what makes it interesting.]',
+    stack: ['Python', 'FastAPI', 'PostgreSQL'],
+    links: { live: '#', github: '#' },
+  },
+];
+---
+
+<Layout title="Projects — Stanley Pang" description="Projects by Stanley Pang.">
+  <header class="page-header">
+    <h1 class="page-title">Projects</h1>
+    <p class="page-sub">{projects.length} projects</p>
+  </header>
+
+  <ul class="index-list">
+    {projects.map((project, i) => (
+      <li class="project-item">
+        <span class="index-num">
+          {String(i + 1).padStart(2, '0')}
+        </span>
+
+        <div class="project-header entry">
+          <span class="project-title">{project.title}</span>
+          <span class="entry-meta">{project.year}</span>
+        </div>
+
+        <p class="project-desc">{project.description}</p>
+
+        <div class="project-footer">
+          <span class="stack-inline">
+            {project.stack.join(' · ')}
+          </span>
+
+          <div class="project-links">
+            {project.links.live && (
+              <a href={project.links.live} class="link" target="_blank" rel="noopener">
+                Live ↗
+              </a>
+            )}
+            {project.links.github && (
+              <a href={project.links.github} class="link" target="_blank" rel="noopener">
+                GitHub ↗
+              </a>
+            )}
+          </div>
+        </div>
+      </li>
+    ))}
+  </ul>
+</Layout>
+
+<style>
+  .page-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0;
+  }
+
+  .page-title {
+    font-family: var(--font-display);
+    font-weight: 300;
+    font-optical-sizing: auto;
+    font-size: var(--text-lg);
+    letter-spacing: -0.01em;
+  }
+
+  .page-sub {
+    font-size: var(--text-xs);
+    color: var(--muted);
+  }
+
+  .project-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .project-title {
+    font-size: var(--text-sm);
+    font-weight: 300;
+  }
+
+  .project-desc {
+    font-size: var(--text-xs);
+    color: var(--muted);
+    line-height: 1.7;
+    max-width: 48ch;
+  }
+
+  .project-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-top: 0.15rem;
+  }
+
+  .stack-inline {
+    font-size: var(--text-2xs);
+    color: var(--subtle);
+    letter-spacing: 0.03em;
+  }
+
+  .project-links {
+    display: flex;
+    gap: 1.25rem;
+    flex-shrink: 0;
+  }
+</style>
