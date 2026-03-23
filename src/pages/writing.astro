@@ -1,0 +1,86 @@
+---
+import { getCollection } from 'astro:content';
+import Layout from '../layouts/Layout.astro';
+
+const fmt = new Intl.DateTimeFormat('en-US', { month: 'short', year: 'numeric' });
+
+const posts = (await getCollection('writing', ({ data }) => !data.draft))
+  .sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf());
+---
+
+<Layout title="Writing — Stanley Pang" description="Writing by Stanley Pang.">
+  <header class="page-header">
+    <h1 class="page-title">Writing</h1>
+    {posts.length > 0 && (
+      <p class="page-sub">{posts.length} {posts.length === 1 ? 'post' : 'posts'}</p>
+    )}
+  </header>
+
+  <hr class="rule" />
+
+  {posts.length === 0 ? (
+    <p class="empty">Nothing here yet.</p>
+  ) : (
+    <ul class="index-list">
+      {posts.map((post, i) => (
+        <li class="post-item">
+          <span class="index-num">
+            {String(i + 1).padStart(2, '0')}
+          </span>
+
+          <div class="entry">
+            <a href={`/writing/${post.id.replace(/\.mdx?$/, '')}`} class="post-title">
+              {post.data.title}
+            </a>
+            <span class="entry-meta">{fmt.format(post.data.date)}</span>
+          </div>
+        </li>
+      ))}
+    </ul>
+  )}
+</Layout>
+
+<style>
+  .page-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .page-title {
+    font-family: var(--font-display);
+    font-weight: 300;
+    font-optical-sizing: auto;
+    font-size: var(--text-lg);
+    letter-spacing: -0.01em;
+  }
+
+  .page-sub {
+    font-size: var(--text-xs);
+    color: var(--muted);
+  }
+
+  .post-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .post-title {
+    font-size: var(--text-sm);
+    font-weight: 300;
+    transition: color 200ms, padding-left 400ms cubic-bezier(0.16, 1, 0.3, 1);
+    display: inline-block;
+  }
+  .post-title:hover {
+    color: var(--muted);
+    padding-left: 0.25rem;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .post-title {
+      transition: color 200ms;
+    }
+  }
+</style>
