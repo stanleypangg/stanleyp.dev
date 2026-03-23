@@ -5,7 +5,6 @@ import Layout from '../layouts/Layout.astro';
 <Layout title="Listening — Stanley Pang" description="Music I've been listening to.">
   <header>
     <span class="label">Listening</span>
-    <p class="scrobble-count" id="scrobble-count">—</p>
   </header>
 
   <hr class="rule" />
@@ -59,8 +58,37 @@ import Layout from '../layouts/Layout.astro';
     </div>
   </section>
 
+<script is:inline>
+  // Restore last rendered HTML synchronously — runs before the deferred module
+  // so cached content appears immediately on every navigation (no skeleton flash).
+  (function () {
+    try {
+      var period = localStorage.getItem('music_last_period') || '7day';
+
+      var artistsHtml = localStorage.getItem('music_ui_artists_' + period);
+      var albumsHtml  = localStorage.getItem('music_ui_albums_'  + period);
+      var tracksHtml  = localStorage.getItem('music_ui_tracks');
+
+      var artistsEl = document.getElementById('artists-grid');
+      var albumsEl  = document.getElementById('albums-grid');
+      var tracksEl  = document.getElementById('track-list');
+
+      if (artistsEl && artistsHtml) artistsEl.innerHTML = artistsHtml;
+      if (albumsEl  && albumsHtml)  albumsEl.innerHTML  = albumsHtml;
+      if (tracksEl  && tracksHtml)  tracksEl.innerHTML  = tracksHtml;
+
+      // Restore period toggle active state
+      if (period !== '7day') {
+        document.querySelectorAll('[data-period]').forEach(function (b) {
+          b.classList.toggle('active', b.getAttribute('data-period') === period);
+        });
+      }
+    } catch (_) { /* localStorage unavailable */ }
+  })();
+</script>
+
 <script>
-  import { getTopArtists, getTopAlbums, getRecentTracks, getUserInfo } from '../lib/lastfm';
+  import { getTopArtists, getTopAlbums, getRecentTracks } from '../lib/lastfm';
   import type { Period, ArtistStat, AlbumStat, Track } from '../lib/lastfm';
 
   const API_KEY = import.meta.env.PUBLIC_LASTFM_API_KEY;
@@ -68,9 +96,8 @@ import Layout from '../layouts/Layout.astro';
 
   // ── localStorage cache ────────────────────────────────────────────────────
   const TTL = {
-    period:   60 * 60 * 1000,       // 1 hour  — artist/album stats change slowly
-    tracks:    5 * 60 * 1000,       // 5 min   — recent tracks change frequently
-    userInfo: 12 * 60 * 60 * 1000,  // 12 hour — scrobble count changes slowly
+    period:   60 * 60 * 1000,   // 1 hour  — artist/album stats change slowly
+    tracks:    5 * 60 * 1000,   // 5 min   — recent tracks change frequently
   };
 
   interface CacheEntry<T> { data: T; ts: number }
@@ -220,8 +247,25 @@ import Layout from '../layouts/Layout.astro';
     if (content) content.innerHTML = '<p class="unavailable">unavailable</p>';
   }
 
+  // ── HTML cache — persist rendered markup for instant restores ─────────────
+  function saveGridHtml(type: 'artists' | 'albums', period: Period): void {
+    try {
+      const el = document.getElementById(`${type}-grid`);
+      if (el) localStorage.setItem(`music_ui_${type}_${period}`, el.innerHTML);
+    } catch { /* quota exceeded */ }
+  }
+
+  function saveTracksHtml(): void {
+    try {
+      const el = document.getElementById('track-list');
+      if (el) localStorage.setItem('music_ui_tracks', el.innerHTML);
+    } catch { /* quota exceeded */ }
+  }
+
   // ── Main load ─────────────────────────────────────────────────────────────
-  let currentPeriod: Period = '7day';
+  let currentPeriod: Period = (() => {
+    try { return (localStorage.getItem('music_last_period') as Period) || '7day'; } catch { return '7day'; }
+  })();
   let viewMode: 'grid' | 'chart' = 'grid';
 
   // Last successfully loaded data — used for instant re-render on view toggle
@@ -241,8 +285,16 @@ import Layout from '../layouts/Layout.astro';
         renderArtistsChart(cached.artists);
         renderAlbumsChart(cached.albums);
       } else {
-        renderArtists(cached.artists, new Map(Object.entries(cached.images)));
-        renderAlbums(cached.albums);
+        // Skip re-render if the inline script already restored this period's HTML —
+        // re-inserting identical HTML destroys and re-creates <img> nodes, causing
+        // the browser to re-request images and flash.
+        const htmlAlreadyRestored = !!localStorage.getItem(`music_ui_artists_${period}`);
+        if (!htmlAlreadyRestored) {
+          renderArtists(cached.artists, new Map(Object.entries(cached.images)));
+          saveGridHtml('artists', period);
+          renderAlbums(cached.albums);
+          saveGridHtml('albums', period);
+        }
       }
       return;
     }
@@ -259,6 +311,7 @@ import Layout from '../layouts/Layout.astro';
         renderAlbumsChart(albumsResult.value);
       } else {
         renderAlbums(albumsResult.value);
+        saveGridHtml('albums', period);
       }
     } else {
       showError('section-albums');
@@ -283,6 +336,7 @@ import Layout from '../layouts/Layout.astro';
         renderArtistsChart(artists);
       } else {
         renderArtists(artists, new Map(Object.entries(images)));
+        saveGridHtml('artists', period);
       }
 
       if (albumsResult.status === 'fulfilled') {
@@ -294,39 +348,15 @@ import Layout from '../layouts/Layout.astro';
   }
 
   async function loadStaticData() {
-    // Serve from cache immediately if fresh
-    const cachedTracks  = cacheGet<Track[]>('music_tracks', TTL.tracks);
-    const cachedUser    = cacheGet<{ playcount: number }>('music_userinfo', TTL.userInfo);
-
-    if (cachedTracks) renderTracks(cachedTracks);
-    if (cachedUser) {
-      const el = document.getElementById('scrobble-count');
-      if (el) el.textContent = `${cachedUser.playcount.toLocaleString()} scrobbles`;
+    const cachedTracks = cacheGet<Track[]>('music_tracks', TTL.tracks);
+    if (cachedTracks) {
+      if (!localStorage.getItem('music_ui_tracks')) { renderTracks(cachedTracks); saveTracksHtml(); }
+      return;
     }
 
-    const fetches: Promise<void>[] = [];
-
-    if (!cachedTracks) {
-      fetches.push(
-        getRecentTracks(10, API_KEY, USERNAME)
-          .then((tracks) => { renderTracks(tracks); cacheSet('music_tracks', tracks); })
-          .catch(() => showError('section-tracks')),
-      );
-    }
-
-    if (!cachedUser) {
-      fetches.push(
-        getUserInfo(API_KEY, USERNAME)
-          .then((user) => {
-            const el = document.getElementById('scrobble-count');
-            if (el) el.textContent = `${user.playcount.toLocaleString()} scrobbles`;
-            cacheSet('music_userinfo', { playcount: user.playcount });
-          })
-          .catch(() => { /* scrobble count is non-critical */ }),
-      );
-    }
-
-    await Promise.allSettled(fetches);
+    await getRecentTracks(10, API_KEY, USERNAME)
+      .then((tracks) => { renderTracks(tracks); saveTracksHtml(); cacheSet('music_tracks', tracks); })
+      .catch(() => showError('section-tracks'));
   }
 
   // ── Toggle ────────────────────────────────────────────────────────────────
@@ -336,6 +366,7 @@ import Layout from '../layouts/Layout.astro';
       const period = btn.dataset.period as Period;
       if (period === currentPeriod) return;
       currentPeriod = period;
+      try { localStorage.setItem('music_last_period', period); } catch { /* ignore */ }
 
       // Update active state
       document.querySelectorAll('[data-period]').forEach((b) => b.classList.remove('active'));
@@ -378,7 +409,9 @@ import Layout from '../layouts/Layout.astro';
         renderAlbumsChart(lastAlbums);
       } else {
         renderArtists(lastArtists, new Map(Object.entries(lastImages)));
+        saveGridHtml('artists', currentPeriod);
         renderAlbums(lastAlbums);
+        saveGridHtml('albums', currentPeriod);
       }
     });
   });
@@ -391,12 +424,6 @@ import Layout from '../layouts/Layout.astro';
 </script>
 
 <style>
-  .scrobble-count {
-    font-size: var(--text-sm);
-    color: var(--muted);
-    margin-top: 0.25rem;
-  }
-
   /* Period toggle */
   .toggle {
     display: flex;

@@ -85,8 +85,10 @@ export async function getTopAlbums(
     limit: String(limit),
   });
   return data.topalbums.album.map((a) => {
-    const medium = a.image.find((i) => i.size === 'medium');
-    const imageUrl = medium?.['#text'] || null;
+    const img = a.image.find((i) => i.size === 'extralarge')
+      ?? a.image.find((i) => i.size === 'large')
+      ?? a.image.find((i) => i.size === 'medium');
+    const imageUrl = img?.['#text'] || null;
     return {
       name: a.name,
       artist: a.artist.name,
