@@ -70,9 +70,16 @@ Add an early return at the top of the existing period toggle handler so it ignor
 ```ts
 document.querySelectorAll<HTMLButtonElement>('.toggle-btn').forEach((btn) => {
   btn.addEventListener('click', async () => {
-    if (!btn.dataset.period) return;   // ← ADD THIS LINE
+    if (!btn.dataset.period) return;   // ← ADD: ignore view buttons
     const period = btn.dataset.period as Period;
-    // ... rest of handler unchanged
+    if (period === currentPeriod) return;
+    currentPeriod = period;
+
+    // ← CHANGE: scope to [data-period] only so view button active state is preserved
+    document.querySelectorAll('[data-period]').forEach((b) => b.classList.remove('active'));
+    btn.classList.add('active');
+
+    // ... skeleton re-render and loadPeriodData call unchanged
   });
 });
 ```
