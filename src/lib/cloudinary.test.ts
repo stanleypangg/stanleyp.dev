@@ -49,6 +49,7 @@ describe('sortNewestFirst', () => {
     ];
     const sorted = sortNewestFirst(resources);
     expect(sorted[0].created_at).toBe('2025-06-01T00:00:00Z');
+    expect(sorted[1].created_at).toBe('2025-03-01T00:00:00Z');
     expect(sorted[2].created_at).toBe('2025-01-01T00:00:00Z');
   });
 });
