@@ -214,8 +214,16 @@ import Layout from '../layouts/Layout.astro';
     const cacheKey = `music_period_${period}`;
     const cached = cacheGet<PeriodData>(cacheKey, TTL.period);
     if (cached) {
-      renderArtists(cached.artists, new Map(Object.entries(cached.images)));
-      renderAlbums(cached.albums);
+      lastArtists = cached.artists;
+      lastImages  = cached.images;
+      lastAlbums  = cached.albums;
+      if (viewMode === 'chart') {
+        renderArtistsChart(cached.artists);
+        renderAlbumsChart(cached.albums);
+      } else {
+        renderArtists(cached.artists, new Map(Object.entries(cached.images)));
+        renderAlbums(cached.albums);
+      }
       return;
     }
 
@@ -226,7 +234,12 @@ import Layout from '../layouts/Layout.astro';
 
     // Albums have their own images from Last.fm — render immediately
     if (albumsResult.status === 'fulfilled') {
-      renderAlbums(albumsResult.value);
+      lastAlbums = albumsResult.value;
+      if (viewMode === 'chart') {
+        renderAlbumsChart(albumsResult.value);
+      } else {
+        renderAlbums(albumsResult.value);
+      }
     } else {
       showError('section-albums');
     }
@@ -243,7 +256,14 @@ import Layout from '../layouts/Layout.astro';
         if (res.ok) images = await res.json() as Record<string, string | null>;
       } catch { /* images are non-critical */ }
 
-      renderArtists(artists, new Map(Object.entries(images)));
+      lastArtists = artists;
+      lastImages  = images;
+
+      if (viewMode === 'chart') {
+        renderArtistsChart(artists);
+      } else {
+        renderArtists(artists, new Map(Object.entries(images)));
+      }
 
       if (albumsResult.status === 'fulfilled') {
         cacheSet<PeriodData>(cacheKey, { artists, albums: albumsResult.value, images });
