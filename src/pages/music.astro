@@ -126,13 +126,17 @@ import Layout from '../layouts/Layout.astro';
     grid.innerHTML = artists.map((a) => {
       const imgUrl = images.get(a.name);
       const imgEl = imgUrl
-        ? `<img src="${esc(imgUrl)}" alt="${esc(a.name)}" width="80" height="80" loading="lazy" />`
+        ? `<img src="${esc(imgUrl)}" alt="${esc(a.name)}" loading="lazy" />`
         : `<div class="img-placeholder" aria-hidden="true"></div>`;
       return `
         <div class="grid-item">
-          <a href="${esc(a.url)}" target="_blank" rel="noopener noreferrer">${imgEl}</a>
-          <span class="item-name">${esc(a.name)}</span>
-          <span class="item-meta">${formatPlaycount(a.playcount)}</span>
+          <a href="${esc(a.url)}" target="_blank" rel="noopener noreferrer">
+            ${imgEl}
+            <div class="item-overlay">
+              <span class="item-name">${esc(a.name)}</span>
+              <span class="item-meta">${formatPlaycount(a.playcount)}</span>
+            </div>
+          </a>
         </div>`;
     }).join('');
   }
@@ -142,43 +146,59 @@ import Layout from '../layouts/Layout.astro';
     grid.classList.remove('chart-view');
     grid.innerHTML = albums.map((a) => {
       const imgEl = a.imageUrl
-        ? `<img src="${esc(a.imageUrl)}" alt="${esc(a.name)}" width="80" height="80" loading="lazy" />`
+        ? `<img src="${esc(a.imageUrl)}" alt="${esc(a.name)}" loading="lazy" />`
         : `<div class="img-placeholder" aria-hidden="true"></div>`;
       return `
         <div class="grid-item">
-          <a href="${esc(a.url)}" target="_blank" rel="noopener noreferrer">${imgEl}</a>
-          <span class="item-name">${esc(a.name)}</span>
-          <span class="item-meta">${esc(a.artist)} · ${formatPlaycount(a.playcount)}</span>
+          <a href="${esc(a.url)}" target="_blank" rel="noopener noreferrer">
+            ${imgEl}
+            <div class="item-overlay">
+              <span class="item-name">${esc(a.name)}</span>
+              <span class="item-meta">${esc(a.artist)} · ${formatPlaycount(a.playcount)}</span>
+            </div>
+          </a>
         </div>`;
     }).join('');
+  }
+
+  function animateBars(grid: HTMLElement) {
+    // Double rAF: first ensures elements are in DOM, second ensures initial width:0 is painted
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      grid.querySelectorAll<HTMLElement>('.chart-bar').forEach((bar, i) => {
+        bar.style.transitionDelay = `${i * 40}ms`;
+        bar.style.width = bar.dataset.pct + '%';
+      });
+    }));
   }
 
   function renderArtistsChart(artists: ArtistStat[]) {
     const grid = document.getElementById('artists-grid')!;
     grid.classList.add('chart-view');
     const max = artists[0]?.playcount ?? 1;
-    grid.innerHTML = artists.map((a, i) => `
+    grid.innerHTML = artists.map((a) => `
       <div class="chart-row">
         <span class="chart-label">${esc(a.name)}</span>
         <div class="chart-track">
-          <div class="chart-bar" style="width:${(a.playcount / max) * 100}%;animation-delay:${i * 40}ms"></div>
+          <div class="chart-bar" data-pct="${(a.playcount / max) * 100}"></div>
         </div>
         <span class="chart-count">${a.playcount.toLocaleString()}</span>
       </div>`).join('');
+    animateBars(grid);
   }
 
   function renderAlbumsChart(albums: AlbumStat[]) {
     const grid = document.getElementById('albums-grid')!;
     grid.classList.add('chart-view');
     const max = albums[0]?.playcount ?? 1;
-    grid.innerHTML = albums.map((a, i) => `
+    grid.innerHTML = albums.map((a) => `
       <div class="chart-row">
         <span class="chart-label">${esc(a.name)}<br><span class="chart-sublabel">${esc(a.artist)}</span></span>
         <div class="chart-track">
-          <div class="chart-bar" style="width:${(a.playcount / max) * 100}%;animation-delay:${i * 40}ms"></div>
+          <div class="chart-bar" data-pct="${(a.playcount / max) * 100}"></div>
         </div>
         <span class="chart-count">${a.playcount.toLocaleString()}</span>
       </div>`).join('');
+    animateBars(grid);
   }
 
   function renderTracks(tracks: Track[]) {
@@ -405,37 +425,62 @@ import Layout from '../layouts/Layout.astro';
   /* Grid (artists + albums) */
   .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
-    gap: 1rem 1.25rem;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 0;
   }
 
-  .grid-item {
-    display: flex;
-    flex-direction: column;
-    gap: 0.3rem;
+  :global(.grid-item) {
+    position: relative;
+    aspect-ratio: 1;
+    overflow: hidden;
   }
 
-  .grid-item img,
-  .grid-item .img-placeholder {
-    width: 80px;
-    height: 80px;
+  :global(.grid-item a) {
+    display: block;
+    width: 100%;
+    height: 100%;
+    text-decoration: none;
+  }
+
+  :global(.grid-item img),
+  :global(.grid-item .img-placeholder) {
+    width: 100%;
+    height: 100%;
     object-fit: cover;
     display: block;
+    transition: transform 400ms cubic-bezier(0.16, 1, 0.3, 1);
   }
 
-  .img-placeholder {
+  :global(.grid-item:hover img) {
+    transform: scale(1.04);
+  }
+
+  :global(.img-placeholder) {
     background: var(--subtle);
   }
 
-  .grid-item .item-name {
+  :global(.item-overlay) {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 1.75rem 0.625rem 0.5rem;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.85) 0%, rgba(0, 0, 0, 0) 100%);
+    pointer-events: none;
+  }
+
+  :global(.item-name) {
+    display: block;
     font-size: var(--text-xs);
-    color: var(--fg);
+    color: #fff;
     line-height: 1.3;
   }
 
-  .grid-item .item-meta {
+  :global(.item-meta) {
+    display: block;
     font-size: var(--text-2xs);
-    color: var(--muted);
+    color: rgba(255, 255, 255, 0.58);
+    margin-top: 0.1rem;
   }
 
   /* Track list */
@@ -447,8 +492,7 @@ import Layout from '../layouts/Layout.astro';
 
   /* Skeleton */
   .skeleton {
-    width: 80px;
-    height: 80px;
+    aspect-ratio: 1;
     background: var(--subtle);
   }
 
@@ -503,16 +547,10 @@ import Layout from '../layouts/Layout.astro';
 
   :global(.chart-bar) {
     height: 100%;
+    width: 0;
     background: var(--fg);
     border-radius: 2px;
-    transform: scaleX(0);
-    transform-origin: left;
-    animation: bar-grow 600ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  }
-
-  @keyframes bar-grow {
-    from { transform: scaleX(0); }
-    to   { transform: scaleX(1); }
+    transition: width 600ms cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   :global(.chart-count) {
@@ -523,8 +561,7 @@ import Layout from '../layouts/Layout.astro';
 
   @media (prefers-reduced-motion: reduce) {
     :global(.chart-bar) {
-      animation: none !important;
-      transform: scaleX(1) !important;
+      transition: none;
     }
   }
 
