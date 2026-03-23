@@ -1,0 +1,100 @@
+---
+import { ViewTransitions } from 'astro:transitions';
+import ThemeToggle from '../components/ThemeToggle.astro';
+import '../styles/global.css';
+
+interface Props {
+  title?: string;
+  description?: string;
+}
+
+const {
+  title = 'Portfolio',
+  description = 'Software engineer.',
+} = Astro.props;
+
+const pathname = Astro.url.pathname;
+const lastUpdated = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+const isWork    = pathname.startsWith('/work');
+const isWriting = pathname.startsWith('/writing');
+const isMusic   = pathname.startsWith('/music');
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content={description} />
+    <title>{title}</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" href="/logo.png" />
+
+    <!-- Google Fonts: Fraunces (display) + DM Sans (body) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=DM+Sans:opsz,wght@9..40,300;9..40,400&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- Prevent flash of wrong theme — must be inline and synchronous -->
+    <script is:inline>
+      (function () {
+        const stored = localStorage.getItem('theme');
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (stored === 'dark' || (!stored && prefersDark)) {
+          document.documentElement.classList.add('dark');
+        }
+      })();
+    </script>
+
+    <ViewTransitions />
+  </head>
+
+  <body>
+    <div class="wrap">
+      <nav class="site-nav">
+        <div class="nav-inner">
+          <a href="/" class="nav-home">
+            <img src="/logo.png" alt="Logo" class="nav-logo" width="28" height="28" />
+          </a>
+          <ul class="nav-links">
+            <li>
+              <a
+                href="/work"
+                class="nav-link"
+                aria-current={isWork ? 'page' : undefined}
+              >work</a>
+            </li>
+            <li>
+              <a
+                href="/writing"
+                class="nav-link"
+                aria-current={isWriting ? 'page' : undefined}
+              >writing</a>
+            </li>
+            <li>
+              <a
+                href="/music"
+                class="nav-link"
+                aria-current={isMusic ? 'page' : undefined}
+              >music</a>
+            </li>
+            <li>
+              <ThemeToggle />
+            </li>
+          </ul>
+        </div>
+      </nav>
+
+      <main>
+        <slot />
+      </main>
+
+      <footer class="site-footer">
+        <span class="footer-updated">Updated {lastUpdated}</span>
+      </footer>
+    </div>
+  </body>
+</html>
