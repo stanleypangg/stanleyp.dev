@@ -14,11 +14,15 @@ Add a `grid · chart` view toggle to the `/music` page. Clicking `chart` replace
 
 ## Existing context
 
-`src/pages/music.astro` contains:
-- A period toggle row (`7 days · 1 month · all time`) implemented as `<button class="toggle-btn">` elements inside `<div class="toggle">`
-- `renderArtists(artists, images)` — renders artist photo grid into `#artists-grid`
-- `renderAlbums(albums)` — renders album photo grid into `#albums-grid`
-- A `viewMode` concept does not yet exist
+`src/pages/music.astro` currently contains:
+
+- A `localStorage` cache layer (`cacheGet` / `cacheSet`) with TTL constants. `loadPeriodData` checks the cache first and returns early on a hit (lines 174–178).
+- `PeriodData` interface: `{ artists: ArtistStat[]; albums: AlbumStat[]; images: Record<string, string | null> }`. The `images` field is keyed by artist name.
+- `renderArtists(artists: ArtistStat[], images: Map<string, string | null>)` — renders grid into `#artists-grid`, which has class `grid`
+- `renderAlbums(albums: AlbumStat[])` — renders grid into `#albums-grid`, which has class `grid`
+- Period toggle handler (line 251) binds to **all** `.toggle-btn` elements via `querySelectorAll('.toggle-btn')` — it will fire on the new view buttons too unless guarded
+- `.toggle` CSS: `display: flex; gap: 1.5rem` — no `justify-content` set
+- `.grid` CSS: `display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr))` — will conflict with chart row layout if the class stays on the container in chart mode
 
 ---
 
@@ -28,11 +32,11 @@ Single file: `src/pages/music.astro`.
 
 ### 1. HTML — toggle row
 
-Add `grid · chart` buttons to the right end of the existing period toggle row. The period buttons stay left-aligned; the view buttons sit right-aligned via `justify-content: space-between`:
+Wrap the three period buttons in a sub-div, and add a second sub-div for the view buttons. Add `justify-content: space-between` inline on the parent to avoid touching the `.toggle` CSS rule used elsewhere:
 
 ```astro
-<div class="toggle" role="group" aria-label="Time period">
-  <div style="display:flex;gap:1.5rem;">
+<div class="toggle" role="group" aria-label="Controls" style="justify-content: space-between;">
+  <div style="display:flex;gap:1.5rem;" role="group" aria-label="Time period">
     <button class="toggle-btn active" data-period="7day">7 days</button>
     <button class="toggle-btn" data-period="1month">1 month</button>
     <button class="toggle-btn" data-period="overall">all time</button>
@@ -44,19 +48,105 @@ Add `grid · chart` buttons to the right end of the existing period toggle row. 
 </div>
 ```
 
-### 2. Script — state and render functions
+Note: `justify-content: space-between` is applied inline rather than modifying the `.toggle` CSS class so the rule stays minimal.
 
-Add `viewMode` state:
+### 2. Script — state and cache variables
+
+Add at module level alongside `currentPeriod`:
 
 ```ts
 let viewMode: 'grid' | 'chart' = 'grid';
+
+// Last successfully loaded data — used for instant re-render on view toggle
+let lastArtists: ArtistStat[] = [];
+let lastImages: Record<string, string | null> = {};
+let lastAlbums:  AlbumStat[]  = [];
 ```
 
-Add two chart render functions:
+### 3. Script — fix period toggle handler interference
+
+Add an early return at the top of the existing period toggle handler so it ignores `[data-view]` button clicks:
+
+```ts
+document.querySelectorAll<HTMLButtonElement>('.toggle-btn').forEach((btn) => {
+  btn.addEventListener('click', async () => {
+    if (!btn.dataset.period) return;   // ← ADD THIS LINE
+    const period = btn.dataset.period as Period;
+    // ... rest of handler unchanged
+  });
+});
+```
+
+### 4. Script — update `loadPeriodData` to respect `viewMode`
+
+**Cache-hit path** (lines 174–178) — populate `last*` variables and branch on `viewMode`:
+
+```ts
+if (cached) {
+  lastArtists = cached.artists;
+  lastImages  = cached.images;
+  lastAlbums  = cached.albums;
+  if (viewMode === 'chart') {
+    renderArtistsChart(cached.artists);
+    renderAlbumsChart(cached.albums);
+  } else {
+    renderArtists(cached.artists, new Map(Object.entries(cached.images)));
+    renderAlbums(cached.albums);
+  }
+  return;
+}
+```
+
+**Live-fetch path** — populate `last*` variables and branch on `viewMode`:
+
+```ts
+// Albums
+if (albumsResult.status === 'fulfilled') {
+  lastAlbums = albumsResult.value;
+  if (viewMode === 'chart') {
+    renderAlbumsChart(albumsResult.value);
+  } else {
+    renderAlbums(albumsResult.value);
+  }
+} else {
+  showError('section-albums');
+}
+
+// Artists
+if (artistsResult.status === 'fulfilled') {
+  const artists = artistsResult.value;
+  let images: Record<string, string | null> = {};
+  try {
+    const params = new URLSearchParams(artists.map((a) => ['names', a.name] as [string, string]));
+    const res = await fetch(`/api/artist-images?${params}`);
+    if (res.ok) images = await res.json() as Record<string, string | null>;
+  } catch { /* images are non-critical */ }
+
+  lastArtists = artists;
+  lastImages  = images;
+
+  if (viewMode === 'chart') {
+    renderArtistsChart(artists);
+  } else {
+    renderArtists(artists, new Map(Object.entries(images)));
+  }
+
+  if (albumsResult.status === 'fulfilled') {
+    cacheSet<PeriodData>(cacheKey, { artists, albums: albumsResult.value, images });
+  }
+} else {
+  showError('section-artists');
+}
+```
+
+### 5. Script — chart render functions
+
+Add alongside the existing `renderArtists` / `renderAlbums`:
 
 ```ts
 function renderArtistsChart(artists: ArtistStat[]) {
   const grid = document.getElementById('artists-grid')!;
+  grid.classList.add('chart-view');
   const max = artists[0]?.playcount ?? 1;
   grid.innerHTML = artists.map((a, i) => `
     <div class="chart-row" style="--delay:${i * 40}ms">
@@ -70,6 +160,7 @@ function renderArtistsChart(artists: ArtistStat[]) {
 
 function renderAlbumsChart(albums: AlbumStat[]) {
   const grid = document.getElementById('albums-grid')!;
+  grid.classList.add('chart-view');
   const max = albums[0]?.playcount ?? 1;
   grid.innerHTML = albums.map((a, i) => `
     <div class="chart-row" style="--delay:${i * 40}ms">
@@ -82,47 +173,25 @@ function renderAlbumsChart(albums: AlbumStat[]) {
 }
 ```
 
-Update `loadPeriodData` to call the correct render function based on `viewMode`:
+Note: `grid.classList.add('chart-view')` overrides the `.grid` auto-fill layout (see CSS section). The existing `renderArtists` and `renderAlbums` must remove this class when called:
 
 ```ts
-// Artists
-if (artistsResult.status === 'fulfilled') {
-  const artists = artistsResult.value;
-  if (viewMode === 'chart') {
-    renderArtistsChart(artists);
-  } else {
-    const token = await getSpotifyToken();
-    const imageEntries = await Promise.all(
-      artists.map(async (a) => {
-        const img = token ? await getArtistImage(a.name, token) : null;
-        return [a.name, img] as [string, string | null];
-      })
-    );
-    renderArtists(artists, new Map(imageEntries));
-  }
+function renderArtists(artists: ArtistStat[], images: Map<string, string | null>) {
+  const grid = document.getElementById('artists-grid')!;
+  grid.classList.remove('chart-view');   // ← ADD
+  // ... rest unchanged
 }
 
-// Albums
-if (albumsResult.status === 'fulfilled') {
-  if (viewMode === 'chart') {
-    renderAlbumsChart(albumsResult.value);
-  } else {
-    renderAlbums(albumsResult.value);
-  }
+function renderAlbums(albums: AlbumStat[]) {
+  const grid = document.getElementById('albums-grid')!;
+  grid.classList.remove('chart-view');   // ← ADD
+  // ... rest unchanged
 }
 ```
 
-Store last-loaded data for instant re-render on view toggle (no re-fetch):
+### 6. Script — view toggle handler
 
-```ts
-let lastArtists: ArtistStat[] = [];
-let lastArtistImages: Map<string, string | null> = new Map();
-let lastAlbums: AlbumStat[] = [];
-```
-
-Store the resolved values into these variables inside `loadPeriodData` after each successful fetch.
-
-Add view toggle click handler:
+Add after the period toggle handler:
 
 ```ts
 document.querySelectorAll<HTMLButtonElement>('[data-view]').forEach((btn) => {
@@ -138,19 +207,47 @@ document.querySelectorAll<HTMLButtonElement>('[data-view]').forEach((btn) => {
       renderArtistsChart(lastArtists);
       renderAlbumsChart(lastAlbums);
     } else {
-      renderArtists(lastArtists, lastArtistImages);
+      renderArtists(lastArtists, new Map(Object.entries(lastImages)));
       renderAlbums(lastAlbums);
     }
   });
 });
 ```
 
-### 3. CSS
+If `lastArtists` / `lastAlbums` are empty (data hasn't loaded yet), the render functions emit empty HTML — the skeleton state persists and the view switch is a no-op until data arrives.
 
-Add chart layout styles:
+### 7. Script — period toggle skeleton re-render
+
+The existing period toggle re-renders skeletons as `grid-item` divs. In chart mode those are invisible (wrong container layout). Update it to re-render the appropriate skeleton based on `viewMode`:
+
+```ts
+if (viewMode === 'chart') {
+  artistsGrid.innerHTML = Array.from({ length: 10 }, (_, i) =>
+    `<div class="chart-row" style="--delay:${i * 40}ms">
+      <span class="chart-label" style="background:var(--subtle);height:0.75rem;border-radius:2px"></span>
+      <div class="chart-track"><div class="chart-bar" style="--pct:60%"></div></div>
+      <span class="chart-count" style="background:var(--subtle);width:2rem;height:0.75rem;border-radius:2px"></span>
+    </div>`).join('');
+  albumsGrid.innerHTML = artistsGrid.innerHTML;
+} else {
+  artistsGrid.innerHTML = Array.from({ length: 10 }, () => '<div class="grid-item skeleton"></div>').join('');
+  albumsGrid.innerHTML  = Array.from({ length: 10 }, () => '<div class="grid-item skeleton"></div>').join('');
+}
+```
+
+### 8. CSS
+
+Add to the `<style>` block:
 
 ```css
-/* Chart view */
+/* Chart view — overrides .grid auto-fill when active */
+.chart-view {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* Chart rows */
 .chart-row {
   display: grid;
   grid-template-columns: 120px 1fr auto;
@@ -207,23 +304,23 @@ Add chart layout styles:
 
 ---
 
-## Toggle row layout note
+## Data flow summary
 
-The existing `.toggle` div uses `display:flex;gap:1.5rem`. Wrapping periods in a sub-div and adding a second sub-div for view buttons, with `justify-content:space-between` on the parent, keeps the existing CSS class intact while splitting the two groups.
+```
+User toggles grid → chart
+  ↓
+viewMode = 'chart'
+  ↓
+renderArtistsChart(lastArtists)   — uses cached data, no re-fetch
+renderAlbumsChart(lastAlbums)     — uses cached data, no re-fetch
 
----
-
-## Data caching
-
-`lastArtists`, `lastArtistImages`, and `lastAlbums` are module-level variables populated after each successful `loadPeriodData` call. When the user toggles view mode, these cached values are passed directly to the render functions — no re-fetch, instant switch.
-
-If `lastArtists` is empty (data hasn't loaded yet), toggling view mode is a no-op on render (the skeleton state persists). When data loads, it renders into whichever view mode is currently active.
-
----
-
-## Error handling
-
-No change to existing error handling. `showError()` still replaces section content with "unavailable" on fetch failure. Chart functions are only called when data is available.
+User changes period (while in chart mode)
+  ↓
+loadPeriodData(newPeriod)
+  ↓
+  cache hit? → populate last*, renderArtistsChart / renderAlbumsChart
+  cache miss? → fetch → populate last*, renderArtistsChart / renderAlbumsChart
+```
 
 ---
 
