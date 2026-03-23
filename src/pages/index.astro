@@ -4,51 +4,69 @@ import NowPlaying from '../components/NowPlaying.astro';
 ---
 
 <Layout title="Stanley Pang — Software Engineer">
+<div class="home-layout">
   <!-- Hero -->
-  <header>
-    <h1 class="display-name">
-      Stanley Pang
-    </h1>
-    <p class="tagline">
-      Software engineer. Building for the web.<br />
-      Currently at <span class="fg">Shopify</span>.
-    </p>
+  <header class="hero">
+    <div class="hero-text">
+      <h1 class="display-name">Stanley Pang</h1>
+<p class="tagline">Software engineer!</p>
+      <p class="bio">
+        Interested in systems where the design decisions are legible in the code itself —
+        where good architecture and good engineering taste are the same thing.
+        Currently studying Computer Science at the University of Toronto
+        and interning at Shopify.
+      </p>
+    </div>
+    <div class="hero-photo">
+      <!-- headshot -->
+    </div>
   </header>
 
   <!-- Work -->
   <section>
     <span class="label">Work</span>
     <div class="role-list">
-      <div class="entry">
-        <span class="entry-title">
-          Software Engineer Intern <span class="entry-sub">at</span> Shopify
-        </span>
-        <span class="entry-meta">Jan 2025–</span>
+      <div class="work-item">
+        <img src="/shopify-logo.svg" alt="Shopify" class="work-logo" />
+        <div class="item-text">
+          <span class="entry-title">Shopify</span>
+          <p class="work-role">Software Engineer Intern</p>
+        </div>
+        <span class="entry-meta">Winter 2025</span>
       </div>
-      <div class="entry">
-        <span class="entry-title">
-          Software Engineer Intern <span class="entry-sub">at</span> Boost Collective
-        </span>
-        <span class="entry-meta">Sep–Dec 2025</span>
+      <div class="work-item">
+        <img src="/boost-collective.jpg" alt="Boost Collective" class="work-logo work-logo--round" />
+        <div class="item-text">
+          <span class="entry-title">Boost Collective</span>
+          <p class="work-role">Software Engineer Intern</p>
+        </div>
+        <span class="entry-meta">Fall 2025</span>
       </div>
-      <div class="entry">
-        <span class="entry-title">
-          Software Developer Intern <span class="entry-sub">at</span> S&amp;P Global
-        </span>
-        <span class="entry-meta">May–Aug 2025</span>
+      <div class="work-item">
+        <img src="/spglobal-logo.jpg" alt="S&P Global" class="work-logo work-logo--round" />
+        <div class="item-text">
+          <span class="entry-title">S&amp;P Global</span>
+          <p class="work-role">Software Developer Intern</p>
+        </div>
+        <span class="entry-meta">Summer 2025</span>
       </div>
     </div>
   </section>
 
 
-  <!-- About -->
+  <!-- Education -->
   <section>
-    <span class="label">About</span>
-    <p class="bio">
-      Care about code that is easy to read and easy to change. Drawn to systems
-      where the design decisions are visible in the code itself. Currently learning
-      how good engineering teams build and ship at scale.
-    </p>
+    <span class="label">Education</span>
+    <div class="role-list">
+      <div class="work-item">
+        <img src="/uoft-logo.svg" alt="University of Toronto" class="edu-logo" />
+        <div class="item-text">
+          <span class="entry-title">University of Toronto</span>
+          <p class="work-role">BSc Computer Science · Math &amp; Stats Minor</p>
+        </div>
+        <span class="entry-meta">2022 - 2027</span>
+      </div>
+    </div>
   </section>
 
 
@@ -56,15 +74,44 @@ import NowPlaying from '../components/NowPlaying.astro';
   <section>
     <span class="label">Listening</span>
     <NowPlaying />
-    <a href="/music" class="link" style="margin-top: 0.5rem;">music →</a>
   </section>
+</div>
 </Layout>
 
 <style>
-  /* Stack sections with consistent rhythm — fix missing inter-section gaps */
-  header + section,
-  section + section {
-    margin-top: 1.75rem;
+  /* Fill main height; hero absorbs all free space below it */
+  .home-layout {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(1.25rem, 3dvh, 2.5rem);
+  }
+
+  .hero {
+    display: flex;
+    align-items: stretch;
+    justify-content: space-between;
+    gap: 2rem;
+  }
+
+  .hero-text {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .hero-photo {
+    aspect-ratio: 1;
+    flex-shrink: 0;
+    border-radius: 2px;
+    background: var(--border);
+    overflow: hidden;
+  }
+
+  .hero-photo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
   }
 
   .display-name {
@@ -74,29 +121,103 @@ import NowPlaying from '../components/NowPlaying.astro';
     font-size: var(--text-2xl);
     line-height: 1.05;
     letter-spacing: -0.02em;
-    margin-bottom: 0.625rem;
+    margin-bottom: 0.5rem;
   }
 
-  .tagline {
+.tagline {
     font-size: var(--text-sm);
     color: var(--muted);
     line-height: 1.6;
+    margin-bottom: 0.5rem;
   }
 
-  .fg {
-    color: var(--fg);
+  .bio {
+    font-size: var(--text-sm);
+    color: var(--muted);
+    line-height: 1.7;
+    max-width: 44ch;
   }
 
   .role-list {
     display: flex;
     flex-direction: column;
-    gap: 0.65rem;
+    gap: 1rem;
   }
 
-  .bio {
-    font-size: var(--text-base);
+  /* Logo + text + date — flat three-column row */
+  .work-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    transition:
+      opacity  250ms cubic-bezier(0.16, 1, 0.3, 1),
+      transform 400ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* Spotlight: dim all rows when the list is hovered — cursor stays
+     inside .role-list between items so the dim never resets mid-travel */
+  .role-list:hover .work-item {
+    opacity: 0.35;
+  }
+
+  /* Hovered row: restore + indent */
+  .role-list:hover .work-item:hover {
+    opacity: 1;
+    transform: translateX(5px);
+  }
+
+  .item-text {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    min-width: 0;
+  }
+
+  .work-role {
+    font-size: var(--text-xs);
     color: var(--muted);
-    max-width: 42ch;
-    line-height: 1.65;
+  }
+
+  .work-logo {
+    height: 32px;
+    width: 32px;
+    flex-shrink: 0;
+    object-fit: contain;
+    filter: saturate(0.75);
+    transition: filter 300ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .work-logo--round {
+    border-radius: 4px;
+  }
+
+  /* UofT coat of arms */
+  .edu-logo {
+    height: 32px;
+    width: 32px;
+    flex-shrink: 0;
+    object-fit: contain;
+    filter: saturate(0.8);
+    transition: filter 300ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* Logo: restore saturation on hover — subtle color reveal */
+  .work-item:hover .work-logo,
+  .work-item:hover .edu-logo {
+    filter: saturate(1);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .work-item {
+      transition: opacity 250ms;
+    }
+    .work-item:hover {
+      transform: none;
+    }
+    .work-logo,
+    .edu-logo {
+      transition: none;
+    }
   }
 </style>
