@@ -3,6 +3,45 @@ import Layout from '../layouts/Layout.astro';
 import NowPlaying from '../components/NowPlaying.astro';
 ---
 
+<script>
+  // Dot-grid parallax — subtle depth on mouse movement
+  function setupParallax() {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    let ticking = false;
+    let lx = 0, ly = 0;
+
+    function onMove(e: MouseEvent) {
+      lx = e.clientX; ly = e.clientY;
+      if (!ticking) {
+        requestAnimationFrame(() => {
+          const x = (lx / window.innerWidth  - 0.5) * 8;
+          const y = (ly / window.innerHeight - 0.5) * 8;
+          document.body.style.backgroundPosition = `${x}px ${y}px`;
+          ticking = false;
+        });
+        ticking = true;
+      }
+    }
+
+    function onLeave() {
+      document.body.style.backgroundPosition = '';
+    }
+
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseleave', onLeave);
+
+    // Clean up before View Transition navigates away
+    document.addEventListener('astro:before-swap', () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseleave', onLeave);
+      document.body.style.backgroundPosition = '';
+    }, { once: true });
+  }
+
+  setupParallax();
+</script>
+
 <Layout title="Stanley Pang — Software Engineer">
 <div class="home-layout">
   <!-- Hero -->
@@ -122,6 +161,11 @@ import NowPlaying from '../components/NowPlaying.astro';
     line-height: 1.05;
     letter-spacing: -0.02em;
     margin-bottom: 0.5rem;
+    transition: font-weight 450ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .display-name:hover {
+    font-weight: 400;
   }
 
 .tagline {
@@ -217,6 +261,35 @@ import NowPlaying from '../components/NowPlaying.astro';
     }
     .work-logo,
     .edu-logo {
+      transition: none;
+    }
+  }
+
+  /* ── Page entrance ─────────────────────────────────────────── */
+  @keyframes enter-up {
+    from { opacity: 0; translate: 0 10px; }
+    to   { opacity: 1; translate: 0 0;   }
+  }
+
+  .hero {
+    animation: enter-up 560ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  section:nth-of-type(1) {
+    animation: enter-up 560ms cubic-bezier(0.16, 1, 0.3, 1) 90ms both;
+  }
+  section:nth-of-type(2) {
+    animation: enter-up 560ms cubic-bezier(0.16, 1, 0.3, 1) 170ms both;
+  }
+  section:nth-of-type(3) {
+    animation: enter-up 560ms cubic-bezier(0.16, 1, 0.3, 1) 250ms both;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .hero, section {
+      animation: none;
+    }
+    .display-name {
       transition: none;
     }
   }

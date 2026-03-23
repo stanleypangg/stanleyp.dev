@@ -5,6 +5,16 @@
 ></button>
 
 <script>
+  function restoreTheme() {
+    const stored = localStorage.getItem('theme');
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    if (stored === 'dark' || (!stored && prefersDark)) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }
+
   function setup() {
     const btn = document.getElementById('theme-toggle');
     if (!btn) return;
@@ -17,5 +27,8 @@
 
   // Runs on initial page load and after every View Transition
   setup();
-  document.addEventListener('astro:after-swap', setup);
+  document.addEventListener('astro:after-swap', () => {
+    restoreTheme();
+    setup();
+  });
 </script>

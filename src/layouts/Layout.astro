@@ -51,6 +51,18 @@ const isPictures = pathname.startsWith('/pictures');
     </script>
 
     <ViewTransitions />
+
+    <!-- Console easter egg — for engineers who inspect -->
+    <script is:inline>
+      if (!window.__greeted) {
+        window.__greeted = true;
+        console.log(
+          '%cStanley Pang\n%cBuilt with Astro · Inspecting the source? Good instinct.',
+          'font-family: Georgia, serif; font-size: 1.1em; font-weight: 400;',
+          'font-family: system-ui, sans-serif; font-size: 0.8em; font-weight: 300; color: #888;'
+        );
+      }
+    </script>
   </head>
 
   <body>
