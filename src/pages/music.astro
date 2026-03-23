@@ -465,14 +465,16 @@ import Layout from '../layouts/Layout.astro';
   }
 
   /* Chart view — overrides .grid auto-fill when active */
-  .chart-view {
+  /* :global() required: chart elements are injected via innerHTML, not in the Astro template,
+     so they don't receive the scoped data-astro-cid attribute. */
+  :global(.chart-view) {
     display: flex;
     flex-direction: column;
     gap: 0;
   }
 
   /* Chart rows */
-  .chart-row {
+  :global(.chart-row) {
     display: grid;
     grid-template-columns: 120px 1fr auto;
     align-items: center;
@@ -480,26 +482,26 @@ import Layout from '../layouts/Layout.astro';
     padding: 0.3rem 0;
   }
 
-  .chart-label {
+  :global(.chart-label) {
     font-size: var(--text-xs);
     color: var(--fg);
     text-align: right;
     line-height: 1.3;
   }
 
-  .chart-sublabel {
+  :global(.chart-sublabel) {
     font-size: var(--text-2xs);
     color: var(--muted);
   }
 
-  .chart-track {
+  :global(.chart-track) {
     height: 4px;
     background: var(--subtle);
     border-radius: 2px;
     overflow: hidden;
   }
 
-  .chart-bar {
+  :global(.chart-bar) {
     height: 100%;
     width: var(--pct);
     background: var(--fg);
@@ -515,14 +517,14 @@ import Layout from '../layouts/Layout.astro';
     to   { transform: scaleX(1); }
   }
 
-  .chart-count {
+  :global(.chart-count) {
     font-size: var(--text-2xs);
     color: var(--muted);
     white-space: nowrap;
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .chart-bar {
+    :global(.chart-bar) {
       animation: none;
       transform: scaleX(1);
     }
