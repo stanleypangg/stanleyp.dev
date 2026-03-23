@@ -10,4 +10,21 @@ const writing = defineCollection({
   }),
 });
 
-export const collections = { writing };
+const projects = defineCollection({
+  loader: glob({ pattern: '*.{md,mdx}', base: './src/content/projects' }),
+  schema: z.object({
+    title: z.string(),
+    year: z.string(),
+    order: z.number(),
+    award: z.string().optional(),
+    description: z.string(),
+    stack: z.array(z.string()),
+    links: z.object({
+      github: z.string().url().optional(),
+      live: z.string().url().optional(),
+      devpost: z.string().url().optional(),
+    }),
+  }),
+});
+
+export const collections = { writing, projects };

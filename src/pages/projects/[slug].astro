@@ -1,0 +1,153 @@
+---
+import { getCollection, render } from 'astro:content';
+import Layout from '../../layouts/Layout.astro';
+
+export async function getStaticPaths() {
+  const projects = await getCollection('projects');
+  return projects.map(entry => ({
+    params: { slug: entry.id.replace(/\.mdx?$/, '') },
+    props: { entry },
+  }));
+}
+
+const { entry } = Astro.props;
+const { Content } = await render(entry);
+---
+
+<Layout
+  title={`${entry.data.title} — Stanley Pang`}
+  description={entry.data.description}
+>
+  <article class="project-detail">
+    <header class="project-header">
+      <div class="project-header-top">
+        <h1 class="project-name">{entry.data.title}</h1>
+      </div>
+
+      {entry.data.award && (
+        <p class="project-award">{entry.data.award}</p>
+      )}
+
+      <p class="project-desc">{entry.data.description}</p>
+
+      <div class="project-meta">
+        <div class="stack">
+          {entry.data.stack.map(tech => (
+            <span class="stack-tag">{tech}</span>
+          ))}
+        </div>
+
+        <div class="project-links">
+          {entry.data.links.live && (
+            <a href={entry.data.links.live} class="link" target="_blank" rel="noopener noreferrer">
+              Live ↗
+            </a>
+          )}
+          {entry.data.links.github && (
+            <a href={entry.data.links.github} class="link" target="_blank" rel="noopener noreferrer">
+              GitHub ↗
+            </a>
+          )}
+          {entry.data.links.devpost && (
+            <a href={entry.data.links.devpost} class="link" target="_blank" rel="noopener noreferrer">
+              Devpost ↗
+            </a>
+          )}
+        </div>
+      </div>
+    </header>
+
+    <hr class="rule" />
+
+    <div class="prose">
+      <Content />
+    </div>
+
+    <hr class="rule" />
+
+    <a href="/projects" class="back-link">← Projects</a>
+  </article>
+</Layout>
+
+<style>
+  .project-detail {
+    animation: enter-up 560ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  @keyframes enter-up {
+    from { opacity: 0; translate: 0 10px; }
+    to   { opacity: 1; translate: 0 0;   }
+  }
+
+  .project-header {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .project-header-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 1rem;
+  }
+
+  .project-name {
+    font-family: var(--font-display);
+    font-weight: 300;
+    font-optical-sizing: auto;
+    font-size: var(--text-lg);
+    letter-spacing: -0.01em;
+    line-height: 1.25;
+  }
+
+  .project-award {
+    font-size: var(--text-2xs);
+    color: var(--subtle);
+    letter-spacing: 0.04em;
+  }
+
+  .project-desc {
+    font-size: var(--text-sm);
+    color: var(--muted);
+    line-height: 1.75;
+    max-width: 55ch;
+  }
+
+  .project-meta {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-top: 0.25rem;
+  }
+
+  .project-links {
+    display: flex;
+    gap: 1.25rem;
+    flex-shrink: 0;
+  }
+
+  .back-link {
+    font-size: var(--text-xs);
+    color: var(--muted);
+    display: inline-block;
+    transition: color 200ms, padding-left 400ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .back-link:hover {
+    color: var(--fg);
+    padding-left: 0.25rem;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .project-detail {
+      animation: none;
+    }
+    .back-link {
+      transition: color 200ms;
+    }
+    .back-link:hover {
+      padding-left: 0;
+    }
+  }
+</style>
