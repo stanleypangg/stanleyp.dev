@@ -7,12 +7,15 @@
     "build": "astro build",
     "preview": "astro preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "reorder": "node --env-file=.env scripts/reorder.mjs"
   },
   "dependencies": {
     "@astrojs/mdx": "^5.0.2",
     "@astrojs/vercel": "^9.0.5",
-    "astro": "^5.0.0"
+    "@supabase/supabase-js": "^2.99.3",
+    "astro": "^5.0.0",
+    "leo-profanity": "^1.9.0"
   },
   "devDependencies": {
     "vitest": "^4.1.0"
