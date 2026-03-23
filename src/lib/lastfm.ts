@@ -21,6 +21,13 @@ export interface Track {
   timestamp: number | null;  // Unix timestamp, null means now-playing
 }
 
+export interface TrackStat {
+  name: string;
+  artist: string;
+  playcount: number;
+  url: string;
+}
+
 export interface UserInfo {
   name: string;
   playcount: number;
@@ -125,6 +132,31 @@ export async function getRecentTracks(
     artist: t.artist['#text'],
     url: t.url,
     timestamp: t.date ? Number(t.date.uts) : null,
+  }));
+}
+
+export async function getTopTracks(
+  period: Period,
+  limit: number,
+  apiKey: string,
+  user: string,
+): Promise<TrackStat[]> {
+  const data = await get<{
+    toptracks: {
+      track: Array<{ name: string; artist: { name: string }; playcount: string; url: string }>;
+    };
+  }>({
+    method: 'user.gettoptracks',
+    user,
+    api_key: apiKey,
+    period,
+    limit: String(limit),
+  });
+  return data.toptracks.track.map((t) => ({
+    name: t.name,
+    artist: t.artist.name,
+    playcount: Number(t.playcount),
+    url: t.url,
   }));
 }
 

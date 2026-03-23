@@ -78,7 +78,7 @@ describe('getTopAlbums', () => {
       name: 'OK Computer',
       artist: 'Radiohead',
       playcount: 20,
-      imageUrl: 'https://img/medium.jpg',
+      imageUrl: 'https://img/large.jpg',
     });
   });
 
@@ -167,6 +167,41 @@ describe('getRecentTracks', () => {
     mockFetch.mockResolvedValueOnce({ ok: false, status: 403 });
     const { getRecentTracks } = await import('./lastfm');
     await expect(getRecentTracks(10, API_KEY, USERNAME)).rejects.toThrow();
+  });
+});
+
+describe('getTopTracks', () => {
+  it('returns parsed track stats', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        toptracks: {
+          track: [
+            { name: 'Karma Police', artist: { name: 'Radiohead' }, playcount: '99', url: 'https://last.fm/karmapolice' },
+          ],
+        },
+      }),
+    });
+
+    const { getTopTracks } = await import('./lastfm');
+    const result = await getTopTracks('7day', 10, API_KEY, USERNAME);
+
+    expect(result).toEqual([
+      { name: 'Karma Police', artist: 'Radiohead', playcount: 99, url: 'https://last.fm/karmapolice' },
+    ]);
+
+    const url = new URL(mockFetch.mock.calls[0][0]);
+    expect(url.searchParams.get('method')).toBe('user.gettoptracks');
+    expect(url.searchParams.get('period')).toBe('7day');
+    expect(url.searchParams.get('limit')).toBe('10');
+    expect(url.searchParams.get('user')).toBe(USERNAME);
+    expect(url.searchParams.get('api_key')).toBe(API_KEY);
+  });
+
+  it('throws on non-ok response', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 403 });
+    const { getTopTracks } = await import('./lastfm');
+    await expect(getTopTracks('7day', 10, API_KEY, USERNAME)).rejects.toThrow();
   });
 });
 
