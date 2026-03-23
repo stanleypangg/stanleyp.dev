@@ -1,0 +1,67 @@
+---
+import { getCollection, render } from 'astro:content';
+import Layout from '../../layouts/Layout.astro';
+
+export async function getStaticPaths() {
+  const posts = await getCollection('writing', ({ data }) => !data.draft);
+  return posts.map(entry => ({
+    params: { slug: entry.id.replace(/\.mdx?$/, '') },
+    props: { entry },
+  }));
+}
+
+const { entry } = Astro.props;
+const { Content } = await render(entry);
+
+const fmt = new Intl.DateTimeFormat('en-US', { month: 'short', year: 'numeric' });
+---
+
+<Layout title={`${entry.data.title} — Stanley Pang`} description={entry.data.title}>
+  <header class="post-header">
+    <h1 class="post-title">{entry.data.title}</h1>
+    <p class="post-date">{fmt.format(entry.data.date)}</p>
+  </header>
+
+  <hr class="rule" />
+
+  <div class="prose">
+    <Content />
+  </div>
+
+  <hr class="rule" />
+
+  <a href="/writing" class="back-link">← Writing</a>
+</Layout>
+
+<style>
+  .post-header {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .post-title {
+    font-family: var(--font-display);
+    font-weight: 300;
+    font-optical-sizing: auto;
+    font-size: var(--text-lg);
+    letter-spacing: -0.01em;
+    line-height: 1.25;
+  }
+
+  .post-date {
+    font-size: var(--text-xs);
+    color: var(--muted);
+  }
+
+  .back-link {
+    font-size: var(--text-xs);
+    color: var(--muted);
+    display: inline-block;
+    transition: color 200ms, padding-left 400ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .back-link:hover {
+    color: var(--fg);
+    padding-left: 0.25rem;
+  }
+</style>
