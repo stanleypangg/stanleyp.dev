@@ -1,0 +1,329 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="Listening — Stanley Pang" description="Music I've been listening to.">
+  <header>
+    <span class="label">Listening</span>
+    <p class="scrobble-count" id="scrobble-count">—</p>
+  </header>
+
+  <hr class="rule" />
+
+  <!-- Period toggle -->
+  <div class="toggle" role="group" aria-label="Time period">
+    <button class="toggle-btn active" data-period="7day">7 days</button>
+    <button class="toggle-btn" data-period="1month">1 month</button>
+    <button class="toggle-btn" data-period="overall">all time</button>
+  </div>
+
+  <hr class="rule" />
+
+  <!-- Top Artists -->
+  <section id="section-artists">
+    <span class="label">Top artists</span>
+    <div class="grid skeleton-grid" id="artists-grid">
+      {Array.from({ length: 10 }).map(() => (
+        <div class="grid-item skeleton" />
+      ))}
+    </div>
+  </section>
+
+  <hr class="rule" />
+
+  <!-- Top Albums -->
+  <section id="section-albums">
+    <span class="label">Top albums</span>
+    <div class="grid skeleton-grid" id="albums-grid">
+      {Array.from({ length: 10 }).map(() => (
+        <div class="grid-item skeleton" />
+      ))}
+    </div>
+  </section>
+
+  <hr class="rule" />
+
+  <!-- Recent Tracks -->
+  <section id="section-tracks">
+    <span class="label">Recent tracks</span>
+    <div class="track-list" id="track-list">
+      {Array.from({ length: 10 }).map(() => (
+        <div class="entry skeleton-row" />
+      ))}
+    </div>
+  </section>
+
+<script>
+  import { getTopArtists, getTopAlbums, getRecentTracks, getUserInfo } from '../lib/lastfm';
+  import type { Period, ArtistStat, AlbumStat, Track } from '../lib/lastfm';
+  import { getArtistImage } from '../lib/spotify';
+
+  const API_KEY = import.meta.env.PUBLIC_LASTFM_API_KEY;
+  const USERNAME = import.meta.env.PUBLIC_LASTFM_USERNAME;
+
+  // ── Spotify token (cached per session) ───────────────────────────────────
+  interface TokenCache { token: string; expiresAt: number }
+
+  async function getSpotifyToken(): Promise<string | null> {
+    try {
+      const cached = sessionStorage.getItem('sp_token');
+      if (cached) {
+        const { token, expiresAt }: TokenCache = JSON.parse(cached);
+        if (Date.now() < expiresAt) return token;
+      }
+      const res = await fetch('/api/spotify-token');
+      if (!res.ok) return null;
+      const { access_token, expires_in } = await res.json();
+      sessionStorage.setItem('sp_token', JSON.stringify({
+        token: access_token,
+        expiresAt: Date.now() + expires_in * 1000 - 60_000, // 1-min buffer
+      }));
+      return access_token;
+    } catch {
+      return null;
+    }
+  }
+
+  // ── Render helpers ────────────────────────────────────────────────────────
+  function formatPlaycount(n: number): string {
+    return n.toLocaleString() + ' plays';
+  }
+
+  function formatTimestamp(ts: number | null): string {
+    if (!ts) return 'now playing';
+    const d = new Date(ts * 1000);
+    const diff = Date.now() - d.getTime();
+    const mins = Math.floor(diff / 60_000);
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    return `${Math.floor(hours / 24)}d ago`;
+  }
+
+  function renderArtists(artists: ArtistStat[], images: Map<string, string | null>) {
+    const grid = document.getElementById('artists-grid')!;
+    grid.innerHTML = artists.map((a) => {
+      const imgUrl = images.get(a.name);
+      const imgEl = imgUrl
+        ? `<img src="${imgUrl}" alt="${a.name}" width="80" height="80" loading="lazy" />`
+        : `<div class="img-placeholder" aria-hidden="true"></div>`;
+      return `
+        <div class="grid-item">
+          <a href="${a.url}" target="_blank" rel="noopener noreferrer">${imgEl}</a>
+          <span class="item-name">${a.name}</span>
+          <span class="item-meta">${formatPlaycount(a.playcount)}</span>
+        </div>`;
+    }).join('');
+    grid.classList.remove('skeleton-grid');
+  }
+
+  function renderAlbums(albums: AlbumStat[]) {
+    const grid = document.getElementById('albums-grid')!;
+    grid.innerHTML = albums.map((a) => {
+      const imgEl = a.imageUrl
+        ? `<img src="${a.imageUrl}" alt="${a.name}" width="80" height="80" loading="lazy" />`
+        : `<div class="img-placeholder" aria-hidden="true"></div>`;
+      return `
+        <div class="grid-item">
+          <a href="${a.url}" target="_blank" rel="noopener noreferrer">${imgEl}</a>
+          <span class="item-name">${a.name}</span>
+          <span class="item-meta">${a.artist} · ${formatPlaycount(a.playcount)}</span>
+        </div>`;
+    }).join('');
+    grid.classList.remove('skeleton-grid');
+  }
+
+  function renderTracks(tracks: Track[]) {
+    const list = document.getElementById('track-list')!;
+    list.innerHTML = tracks.map((t) => `
+      <div class="entry">
+        <span class="entry-title">
+          <a href="${t.url}" target="_blank" rel="noopener noreferrer" class="link">${t.name}</a>
+          <span class="entry-sub">${t.artist}</span>
+        </span>
+        <span class="entry-meta">${formatTimestamp(t.timestamp)}</span>
+      </div>`).join('');
+  }
+
+  function showError(sectionId: string) {
+    const el = document.getElementById(sectionId);
+    if (!el) return;
+    const content = el.querySelector('[id$="-grid"], [id$="-list"]');
+    if (content) content.innerHTML = '<p class="unavailable">unavailable</p>';
+  }
+
+  // ── Main load ─────────────────────────────────────────────────────────────
+  let currentPeriod: Period = '7day';
+
+  async function loadPeriodData(period: Period) {
+    // Fetch period-dependent data in parallel
+    const [artistsResult, albumsResult] = await Promise.allSettled([
+      getTopArtists(period, 10, API_KEY, USERNAME),
+      getTopAlbums(period, 10, API_KEY, USERNAME),
+    ]);
+
+    // Artists
+    if (artistsResult.status === 'fulfilled') {
+      const artists = artistsResult.value;
+      const token = await getSpotifyToken();
+      const imageEntries = await Promise.all(
+        artists.map(async (a) => {
+          const img = token ? await getArtistImage(a.name, token) : null;
+          return [a.name, img] as [string, string | null];
+        })
+      );
+      renderArtists(artists, new Map(imageEntries));
+    } else {
+      showError('section-artists');
+    }
+
+    // Albums
+    if (albumsResult.status === 'fulfilled') {
+      renderAlbums(albumsResult.value);
+    } else {
+      showError('section-albums');
+    }
+  }
+
+  async function loadStaticData() {
+    // Fetch period-independent data in parallel
+    const [tracksResult, userResult] = await Promise.allSettled([
+      getRecentTracks(10, API_KEY, USERNAME),
+      getUserInfo(API_KEY, USERNAME),
+    ]);
+
+    if (tracksResult.status === 'fulfilled') {
+      renderTracks(tracksResult.value);
+    } else {
+      showError('section-tracks');
+    }
+
+    if (userResult.status === 'fulfilled') {
+      const el = document.getElementById('scrobble-count');
+      if (el) el.textContent = `${userResult.value.playcount.toLocaleString()} scrobbles`;
+    }
+  }
+
+  // ── Toggle ────────────────────────────────────────────────────────────────
+  document.querySelectorAll<HTMLButtonElement>('.toggle-btn').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const period = btn.dataset.period as Period;
+      if (period === currentPeriod) return;
+      currentPeriod = period;
+
+      // Update active state
+      document.querySelectorAll('.toggle-btn').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+
+      // Re-render skeletons for period-dependent sections only
+      const artistsGrid = document.getElementById('artists-grid')!;
+      const albumsGrid = document.getElementById('albums-grid')!;
+      artistsGrid.innerHTML = Array.from({ length: 10 }, () => '<div class="grid-item skeleton"></div>').join('');
+      albumsGrid.innerHTML  = Array.from({ length: 10 }, () => '<div class="grid-item skeleton"></div>').join('');
+
+      await loadPeriodData(period);
+    });
+  });
+
+  // ── Initial load ──────────────────────────────────────────────────────────
+  await Promise.allSettled([
+    loadPeriodData(currentPeriod),
+    loadStaticData(),
+  ]);
+</script>
+
+<style>
+  .scrobble-count {
+    font-size: var(--text-sm);
+    color: var(--muted);
+    margin-top: 0.25rem;
+  }
+
+  /* Period toggle */
+  .toggle {
+    display: flex;
+    gap: 1.5rem;
+  }
+
+  .toggle-btn {
+    font-family: var(--font-text);
+    font-size: var(--text-xs);
+    letter-spacing: 0.05em;
+    text-transform: lowercase;
+    color: var(--muted);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    transition: color 250ms, padding-left 500ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .toggle-btn:hover,
+  .toggle-btn.active {
+    color: var(--fg);
+    padding-left: 0.4rem;
+  }
+
+  /* Grid (artists + albums) */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    gap: 1rem 1.25rem;
+  }
+
+  .grid-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+
+  .grid-item img,
+  .grid-item .img-placeholder {
+    width: 80px;
+    height: 80px;
+    object-fit: cover;
+    display: block;
+  }
+
+  .img-placeholder {
+    background: var(--subtle);
+  }
+
+  .grid-item .item-name {
+    font-size: var(--text-xs);
+    color: var(--fg);
+    line-height: 1.3;
+  }
+
+  .grid-item .item-meta {
+    font-size: var(--text-2xs);
+    color: var(--muted);
+  }
+
+  /* Track list */
+  .track-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  /* Skeleton */
+  .skeleton {
+    width: 80px;
+    height: 80px;
+    background: var(--subtle);
+  }
+
+  .skeleton-row {
+    height: 1.2rem;
+    background: var(--subtle);
+    border-radius: 2px;
+  }
+
+  /* Error state */
+  .unavailable {
+    font-size: var(--text-sm);
+    color: var(--muted);
+  }
+</style>
+</Layout>
