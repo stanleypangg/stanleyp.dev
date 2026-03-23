@@ -19,9 +19,11 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
     if (res.ok) {
       const { resources } = await res.json();
       photos = sortNewestFirst(resources).map(r => mapResource(CLOUDINARY_CLOUD_NAME as string, r));
+    } else {
+      console.warn(`[pictures] Cloudinary API returned ${res.status} ${res.statusText}`);
     }
-  } catch {
-    // network error — show empty state
+  } catch (err) {
+    console.warn('[pictures] Failed to fetch from Cloudinary:', err);
   }
 }
 ---
