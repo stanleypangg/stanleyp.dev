@@ -108,4 +108,13 @@ describe('getArtistImage', () => {
     const called = mockFetch.mock.calls[0][0] as string;
     expect(called).toContain('AC%2FDC');
   });
+
+  it('returns null when response body is not valid JSON', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => { throw new SyntaxError('Unexpected token'); },
+    });
+    const { getArtistImage } = await import('./spotify');
+    expect(await getArtistImage('Artist', 'tok')).toBeNull();
+  });
 });
