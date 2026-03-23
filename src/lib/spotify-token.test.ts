@@ -14,7 +14,7 @@ describe('getSpotifyClientToken', () => {
       json: async () => ({ access_token: 'tok_abc', expires_in: 3600 }),
     });
 
-    const { getSpotifyClientToken } = await import('./spotify-token');
+    const { getSpotifyClientToken } = await import('../pages/api/spotify-token');
     const res = await getSpotifyClientToken('cid', 'csec');
     const body = await res.json();
 
@@ -29,14 +29,14 @@ describe('getSpotifyClientToken', () => {
   });
 
   it('returns 500 when credentials are missing', async () => {
-    const { getSpotifyClientToken } = await import('./spotify-token');
+    const { getSpotifyClientToken } = await import('../pages/api/spotify-token');
     const res = await getSpotifyClientToken('', '');
     expect(res.status).toBe(500);
   });
 
   it('returns 502 when Spotify responds with an error', async () => {
     mockFetch.mockResolvedValueOnce({ ok: false, status: 400 });
-    const { getSpotifyClientToken } = await import('./spotify-token');
+    const { getSpotifyClientToken } = await import('../pages/api/spotify-token');
     const res = await getSpotifyClientToken('cid', 'csec');
     expect(res.status).toBe(502);
   });
