@@ -5,6 +5,7 @@
   --muted:   oklch(52%   0.003 80);
   --subtle:  oklch(72%   0.003 80);
   --border:  oklch(88%   0.003 80);
+  --dot:     oklch(83%   0.003 80);
 }
 
 :root.dark {
@@ -13,6 +14,7 @@
   --muted:   oklch(54%   0.003  80);
   --subtle:  oklch(35%   0.003 260);
   --border:  oklch(20%   0.003 260);
+  --dot:     oklch(17%   0.003 260);
 }
 
 /* ── Type tokens ───────────────────────────────────────────── */
@@ -30,7 +32,7 @@
 
 /* ── Layout tokens ─────────────────────────────────────────── */
 :root {
-  --max-w: 640px;
+  --max-w: 760px;
   --pad-x: clamp(1.25rem, 5vw, 2rem);
 }
 
@@ -49,6 +51,8 @@ html {
 
 body {
   background-color: var(--bg);
+  background-image: radial-gradient(var(--dot) 1px, transparent 1px);
+  background-size: 28px 28px;
   color: var(--fg);
   font-family: var(--font-text);
   font-weight: 300;
@@ -213,6 +217,8 @@ img, video {
 main {
   flex: 1;
   padding-bottom: 2rem;
+  display: flex;
+  flex-direction: column;
 }
 
 /* ── Horizontal rule ───────────────────────────────────────── */
