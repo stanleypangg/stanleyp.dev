@@ -122,6 +122,7 @@ import Layout from '../layouts/Layout.astro';
 
   function renderArtists(artists: ArtistStat[], images: Map<string, string | null>) {
     const grid = document.getElementById('artists-grid')!;
+    grid.classList.remove('chart-view');
     grid.innerHTML = artists.map((a) => {
       const imgUrl = images.get(a.name);
       const imgEl = imgUrl
@@ -138,6 +139,7 @@ import Layout from '../layouts/Layout.astro';
 
   function renderAlbums(albums: AlbumStat[]) {
     const grid = document.getElementById('albums-grid')!;
+    grid.classList.remove('chart-view');
     grid.innerHTML = albums.map((a) => {
       const imgEl = a.imageUrl
         ? `<img src="${esc(a.imageUrl)}" alt="${esc(a.name)}" width="80" height="80" loading="lazy" />`
@@ -149,6 +151,34 @@ import Layout from '../layouts/Layout.astro';
           <span class="item-meta">${esc(a.artist)} · ${formatPlaycount(a.playcount)}</span>
         </div>`;
     }).join('');
+  }
+
+  function renderArtistsChart(artists: ArtistStat[]) {
+    const grid = document.getElementById('artists-grid')!;
+    grid.classList.add('chart-view');
+    const max = artists[0]?.playcount ?? 1;
+    grid.innerHTML = artists.map((a, i) => `
+      <div class="chart-row" style="--delay:${i * 40}ms">
+        <span class="chart-label">${esc(a.name)}</span>
+        <div class="chart-track">
+          <div class="chart-bar" style="--pct:${(a.playcount / max) * 100}%"></div>
+        </div>
+        <span class="chart-count">${a.playcount.toLocaleString()}</span>
+      </div>`).join('');
+  }
+
+  function renderAlbumsChart(albums: AlbumStat[]) {
+    const grid = document.getElementById('albums-grid')!;
+    grid.classList.add('chart-view');
+    const max = albums[0]?.playcount ?? 1;
+    grid.innerHTML = albums.map((a, i) => `
+      <div class="chart-row" style="--delay:${i * 40}ms">
+        <span class="chart-label">${esc(a.name)}<br><span class="chart-sublabel">${esc(a.artist)}</span></span>
+        <div class="chart-track">
+          <div class="chart-bar" style="--pct:${(a.playcount / max) * 100}%"></div>
+        </div>
+        <span class="chart-count">${a.playcount.toLocaleString()}</span>
+      </div>`).join('');
   }
 
   function renderTracks(tracks: Track[]) {
