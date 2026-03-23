@@ -1,6 +1,7 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import { mapResource, sortNewestFirst, type Photo } from '../lib/cloudinary';
+import photoOrder from '../data/photo-order.json';
 
 const { CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET } = import.meta.env;
 
@@ -9,21 +10,38 @@ let photos: Photo[] = [];
 if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
   try {
     const res = await fetch(
-      `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/resources/image?type=upload&prefix=pictures/&max_results=500`,
+      `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/resources/search`,
       {
+        method: 'POST',
         headers: {
           Authorization: `Basic ${btoa(`${CLOUDINARY_API_KEY}:${CLOUDINARY_API_SECRET}`)}`,
+          'Content-Type': 'application/json',
         },
+        body: JSON.stringify({
+          expression: 'asset_folder=pictures',
+          with_field: ['context'],
+          max_results: 500,
+        }),
       }
     );
     if (res.ok) {
       const { resources } = await res.json();
-      photos = sortNewestFirst(resources).map(r => mapResource(CLOUDINARY_CLOUD_NAME as string, r));
+      const ordered = photoOrder.length > 0
+        ? [...resources].sort((a, b) => {
+            const ai = photoOrder.indexOf(a.public_id);
+            const bi = photoOrder.indexOf(b.public_id);
+            if (ai === -1 && bi === -1) return 0;
+            if (ai === -1) return 1;
+            if (bi === -1) return -1;
+            return ai - bi;
+          })
+        : sortNewestFirst(resources);
+      photos = ordered.map(r => mapResource(CLOUDINARY_CLOUD_NAME as string, r));
     } else {
-      console.warn(`[pictures] Cloudinary API returned ${res.status} ${res.statusText}`);
+      console.warn(`[pictures] Cloudinary API returned ${res.status}`);
     }
   } catch (err) {
-    console.warn('[pictures] Failed to fetch from Cloudinary:', err);
+    console.warn('[pictures] Failed to fetch from Cloudinary:', err instanceof Error ? err.message : 'unknown error');
   }
 }
 ---
@@ -31,36 +49,46 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
 <Layout title="Pictures — Stanley Pang" description="Photos by Stanley Pang.">
   <header class="page-header">
     <h1 class="page-title">Pictures</h1>
-    {photos.length > 0 && (
-      <p class="page-sub">{photos.length} {photos.length === 1 ? 'photo' : 'photos'}</p>
-    )}
   </header>
 
-  <hr class="rule" />
+  <div style="margin-top: 1.5rem;"></div>
 
   {photos.length === 0 ? (
     <p class="empty">Nothing here yet.</p>
   ) : (
-    <ul class="photo-list">
+    <ul class="photo-grid">
       {photos.map((photo, i) => (
-        <li class="photo-item">
-          <span class="index-num">{String(i + 1).padStart(2, '0')}</span>
-          <img
-            src={photo.src}
-            alt={photo.alt}
-            class="photo-img"
-            loading="lazy"
-          />
-          {(photo.caption || photo.date) && (
-            <div class="photo-meta entry">
-              {photo.caption && <span class="photo-caption">{photo.caption}</span>}
-              {photo.date && <span class="entry-meta">{photo.date}</span>}
-            </div>
-          )}
+        <li class={`photo-item${i < 6 ? ' is-eager' : ''}`}>
+          <div class="photo-wrap" role="button" tabindex="0" aria-label={photo.alt || `Photo ${i + 1}`}>
+            <img
+              src={photo.src}
+              alt={photo.alt}
+              class="photo-img"
+              loading={i < 6 ? 'eager' : 'lazy'}
+              fetchpriority={i < 6 ? 'high' : 'auto'}
+            />
+          </div>
         </li>
       ))}
     </ul>
   )}
+
+  <script id="photo-data" type="application/json" set:html={JSON.stringify(photos)} />
+
+  <dialog id="lightbox" class="lightbox" aria-label="Photo viewer">
+    <div class="lightbox-content">
+      <button class="lightbox-close" aria-label="Close">&times;</button>
+      <img class="lightbox-img" src="" alt="" />
+      <div class="lightbox-meta">
+        <span class="lightbox-caption"></span>
+      </div>
+      <div class="lightbox-controls">
+        <button class="lightbox-btn lightbox-prev" aria-label="Previous photo">&larr;</button>
+        <span class="lightbox-counter"></span>
+        <button class="lightbox-btn lightbox-next" aria-label="Next photo">&rarr;</button>
+      </div>
+    </div>
+  </dialog>
 </Layout>
 
 <style>
@@ -84,37 +112,374 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
     color: var(--muted);
   }
 
-  .photo-list {
-    display: flex;
-    flex-direction: column;
-    gap: 3rem;
+  .photo-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    grid-auto-rows: 4px;
+    column-gap: 0.5rem;
+    row-gap: 0;
     list-style: none;
   }
 
   .photo-item {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
+    opacity: 0;
+    transition: opacity 400ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* Eager images snap in — no fade delay once grid is sized */
+  .photo-item.is-eager {
+    transition: none;
+  }
+
+  .photo-item.is-ready {
+    opacity: 1;
+  }
+
+  .photo-wrap {
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 0 0 0px var(--bg), 0 0 0 0px var(--fg);
+    transition: box-shadow 200ms ease;
+    cursor: pointer;
+  }
+
+  .photo-wrap:hover {
+    box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--fg);
+  }
+
+  .photo-wrap:focus-visible {
+    outline: 2px solid var(--fg);
+    outline-offset: 2px;
   }
 
   .photo-img {
     width: 100%;
     height: auto;
     display: block;
-    filter: saturate(0.88);
-    transition: filter 300ms;
+    filter: saturate(0.85);
+    transition: filter 300ms ease;
   }
 
-  .photo-img:hover {
+  .photo-wrap:hover .photo-img {
     filter: saturate(1);
   }
 
-  .photo-meta {
-    margin-top: 0.1rem;
+  /* ── Lightbox ─────────────────────────────────────────────── */
+
+  .lightbox {
+    border: none;
+    background: transparent;
+    padding: 0;
+    /* display must NOT be set here — author display overrides UA display:none
+       for closed dialogs, making the element visible and blocking interactions */
   }
 
-  .photo-caption {
+  .lightbox[open] {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    max-width: 100dvw;
+    max-height: 100dvh;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    touch-action: none; /* prevent browser from hijacking horizontal swipes */
+  }
+
+  .lightbox::backdrop {
+    background: oklch(0% 0 0 / 0.6);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+  }
+
+  .lightbox-content {
+    position: relative;
+    max-width: min(90vw, 1100px);
+    max-height: 85dvh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .lightbox-img {
+    max-width: 100%;
+    max-height: 70dvh;
+    object-fit: contain;
+    border-radius: 4px;
+    filter: saturate(1);
+    display: block;
+  }
+
+  @keyframes lb-out-left {
+    to { opacity: 0; translate: -48px 0; }
+  }
+  @keyframes lb-out-right {
+    to { opacity: 0; translate: 48px 0; }
+  }
+  @keyframes lb-in-left {
+    from { opacity: 0; translate: -48px 0; }
+  }
+  @keyframes lb-in-right {
+    from { opacity: 0; translate: 48px 0; }
+  }
+
+  .lightbox-img.lb-out-left  { animation: lb-out-left  180ms cubic-bezier(0.4, 0, 1, 1) both; }
+  .lightbox-img.lb-out-right { animation: lb-out-right 180ms cubic-bezier(0.4, 0, 1, 1) both; }
+  .lightbox-img.lb-in-left   { animation: lb-in-left   220ms cubic-bezier(0, 0, 0.2, 1) both; }
+  .lightbox-img.lb-in-right  { animation: lb-in-right  220ms cubic-bezier(0, 0, 0.2, 1) both; }
+
+  .lightbox-close {
+    position: absolute;
+    top: -2.25rem;
+    right: -0.5rem;
+    font-family: var(--font-text);
+    font-size: 1.25rem;
+    font-weight: 300;
+    color: oklch(92% 0 0);
+    background: none;
+    border: none;
+    cursor: pointer;
+    min-width: 44px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 150ms ease;
+    line-height: 1;
+  }
+
+  .lightbox-close:hover {
+    color: oklch(100% 0 0);
+  }
+
+  .lightbox-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.2rem;
+    text-align: center;
+  }
+
+  .lightbox-meta:empty {
+    display: none;
+  }
+
+  .lightbox-caption {
+    font-family: var(--font-text);
     font-size: var(--text-xs);
-    color: var(--muted);
+    font-weight: 300;
+    color: oklch(75% 0 0);
+  }
+
+  .lightbox-caption:empty {
+    display: none;
+  }
+
+.lightbox-controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1.5rem;
+  }
+
+  .lightbox-btn {
+    font-family: var(--font-text);
+    font-size: var(--text-base);
+    font-weight: 300;
+    color: oklch(92% 0 0);
+    background: none;
+    border: none;
+    cursor: pointer;
+    min-width: 44px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 150ms ease;
+    line-height: 1;
+  }
+
+  .lightbox-btn:hover {
+    color: oklch(100% 0 0);
+  }
+
+  .lightbox-counter {
+    font-family: var(--font-text);
+    font-size: var(--text-2xs);
+    font-weight: 300;
+    color: oklch(80% 0 0);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.06em;
+    min-width: 5ch;
+    text-align: center;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .lightbox::backdrop {
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+  }
+
+  @media (max-width: 600px) {
+    .lightbox-content {
+      max-width: 95vw;
+    }
+
+    .lightbox-close {
+      top: -2.5rem;
+      right: 0;
+    }
   }
 </style>
+
+<script>
+  const GAP = 8; // px between items vertically
+
+  function spanItem(item: HTMLElement) {
+    const img = item.querySelector('img');
+    if (!img) return;
+    const h = img.getBoundingClientRect().height;
+    if (h === 0) return;
+    item.style.gridRowEnd = `span ${Math.ceil((h + GAP) / 4)}`;
+    item.classList.add('is-ready');
+  }
+
+  function spanAll() {
+    document.querySelectorAll<HTMLElement>('.photo-item').forEach(spanItem);
+  }
+
+  // ── Lightbox state ────────────────────────────────────────────
+  type Photo = { src: string; alt: string; date: string; caption?: string };
+  let currentIndex = 0;
+  let lightboxPhotos: Photo[] = [];
+  let lbController: AbortController | null = null;
+
+  function getPhotos(): Photo[] {
+    const el = document.getElementById('photo-data');
+    if (!el) return [];
+    try { return JSON.parse(el.textContent || '[]'); } catch { return []; }
+  }
+
+  function updateLightbox() {
+    const photo = lightboxPhotos[currentIndex];
+    if (!photo) return;
+    const img = document.querySelector<HTMLImageElement>('.lightbox-img');
+    const counter = document.querySelector<HTMLElement>('.lightbox-counter');
+    const caption = document.querySelector<HTMLElement>('.lightbox-caption');
+    if (img) { img.src = photo.src; img.alt = photo.alt; }
+    if (counter) counter.textContent = `${currentIndex + 1} / ${lightboxPhotos.length}`;
+    if (caption) caption.textContent = photo.caption || '';
+  }
+
+  function openLightbox(index: number) {
+    const dialog = document.getElementById('lightbox') as HTMLDialogElement | null;
+    if (!dialog) return;
+    lightboxPhotos = getPhotos();
+    if (lightboxPhotos.length === 0) return;
+    currentIndex = index;
+    updateLightbox();
+    dialog.showModal();
+  }
+
+  function closeLightbox() {
+    const dialog = document.getElementById('lightbox') as HTMLDialogElement | null;
+    dialog?.close();
+  }
+
+  function navigate(delta: number) {
+    const len = lightboxPhotos.length;
+    if (len === 0) return;
+
+    const img = document.querySelector<HTMLImageElement>('.lightbox-img');
+    if (!img) {
+      currentIndex = (currentIndex + delta + len) % len;
+      updateLightbox();
+      return;
+    }
+
+    const outClass = delta > 0 ? 'lb-out-left' : 'lb-out-right';
+    const inClass  = delta > 0 ? 'lb-in-right' : 'lb-in-left';
+
+    // Clear any in-flight animation before starting a new one
+    img.classList.remove('lb-out-left', 'lb-out-right', 'lb-in-left', 'lb-in-right');
+    void img.offsetWidth; // force reflow to restart animation
+
+    img.classList.add(outClass);
+    img.addEventListener('animationend', () => {
+      img.classList.remove(outClass);
+      currentIndex = (currentIndex + delta + len) % len;
+      updateLightbox();
+      img.classList.add(inClass);
+      img.addEventListener('animationend', () => img.classList.remove(inClass), { once: true });
+    }, { once: true });
+  }
+
+  function init() {
+    // Masonry grid sizing
+    document.querySelectorAll<HTMLImageElement>('.photo-img').forEach(img => {
+      if (img.complete) spanItem(img.closest('.photo-item') as HTMLElement);
+      else img.addEventListener('load', () => spanItem(img.closest('.photo-item') as HTMLElement));
+    });
+
+    // ── Lightbox ─────────────────────────────────────────────
+    const dialog = document.getElementById('lightbox') as HTMLDialogElement | null;
+    if (!dialog) return;
+
+    // Abort previous listeners before re-attaching.
+    // init() runs twice on first load (direct call + astro:page-load), which would
+    // double every listener and cause navigate() to fire twice per click.
+    lbController?.abort();
+    lbController = new AbortController();
+    const { signal } = lbController;
+
+    document.querySelectorAll<HTMLElement>('.photo-item').forEach((item, i) => {
+      const wrap = item.querySelector<HTMLElement>('.photo-wrap');
+      if (!wrap) return;
+      wrap.addEventListener('click', () => openLightbox(i), { signal });
+      wrap.addEventListener('keydown', (e: KeyboardEvent) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openLightbox(i); }
+      }, { signal });
+    });
+
+    dialog.querySelector('.lightbox-prev')?.addEventListener('click', () => navigate(-1), { signal });
+    dialog.querySelector('.lightbox-next')?.addEventListener('click', () => navigate(1), { signal });
+    dialog.querySelector('.lightbox-close')?.addEventListener('click', closeLightbox, { signal });
+
+    dialog.addEventListener('click', (e: MouseEvent) => {
+      if (e.target === dialog) closeLightbox();
+    }, { signal });
+
+    dialog.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') { e.preventDefault(); navigate(-1); }
+      if (e.key === 'ArrowRight') { e.preventDefault(); navigate(1); }
+    }, { signal });
+
+    let touchStartX = 0;
+    let touchStartY = 0;
+    dialog.addEventListener('touchstart', (e: TouchEvent) => {
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+    }, { passive: true, signal });
+    dialog.addEventListener('touchend', (e: TouchEvent) => {
+      const dx = e.changedTouches[0].clientX - touchStartX;
+      const dy = e.changedTouches[0].clientY - touchStartY;
+      if (Math.abs(dx) > 44 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+        navigate(dx > 0 ? -1 : 1);
+      }
+    }, { passive: true, signal });
+    dialog.addEventListener('touchcancel', () => {
+      touchStartX = 0;
+      touchStartY = 0;
+    }, { signal });
+  }
+
+  init();
+  document.addEventListener('astro:page-load', init);
+  let resizeRaf = 0;
+  window.addEventListener('resize', () => {
+    cancelAnimationFrame(resizeRaf);
+    resizeRaf = requestAnimationFrame(spanAll);
+  });
+</script>
