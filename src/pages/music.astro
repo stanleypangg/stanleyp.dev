@@ -501,15 +501,17 @@ import Layout from '../layouts/Layout.astro';
 
   .chart-bar {
     height: 100%;
-    width: 0;
+    width: var(--pct);
     background: var(--fg);
     border-radius: 2px;
+    transform: scaleX(0);
+    transform-origin: left;
     animation: bar-grow 600ms cubic-bezier(0.16, 1, 0.3, 1) var(--delay, 0ms) forwards;
   }
 
   @keyframes bar-grow {
-    from { width: 0%; }
-    to   { width: var(--pct); }
+    from { transform: scaleX(0); }
+    to   { transform: scaleX(1); }
   }
 
   .chart-count {
@@ -521,7 +523,7 @@ import Layout from '../layouts/Layout.astro';
   @media (prefers-reduced-motion: reduce) {
     .chart-bar {
       animation: none;
-      width: var(--pct);
+      transform: scaleX(1);
     }
   }
 
