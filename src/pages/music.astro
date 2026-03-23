@@ -22,7 +22,7 @@ import Layout from '../layouts/Layout.astro';
   <!-- Top Artists -->
   <section id="section-artists">
     <span class="label">Top artists</span>
-    <div class="grid skeleton-grid" id="artists-grid">
+    <div class="grid" id="artists-grid">
       {Array.from({ length: 10 }).map(() => (
         <div class="grid-item skeleton" />
       ))}
@@ -34,7 +34,7 @@ import Layout from '../layouts/Layout.astro';
   <!-- Top Albums -->
   <section id="section-albums">
     <span class="label">Top albums</span>
-    <div class="grid skeleton-grid" id="albums-grid">
+    <div class="grid" id="albums-grid">
       {Array.from({ length: 10 }).map(() => (
         <div class="grid-item skeleton" />
       ))}
@@ -85,12 +85,20 @@ import Layout from '../layouts/Layout.astro';
   }
 
   // ── Render helpers ────────────────────────────────────────────────────────
+  function esc(s: string): string {
+    return s
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
   function formatPlaycount(n: number): string {
     return n.toLocaleString() + ' plays';
   }
 
   function formatTimestamp(ts: number | null): string {
-    if (!ts) return 'now playing';
+    if (ts === null) return 'now playing';
     const d = new Date(ts * 1000);
     const diff = Date.now() - d.getTime();
     const mins = Math.floor(diff / 60_000);
@@ -105,32 +113,30 @@ import Layout from '../layouts/Layout.astro';
     grid.innerHTML = artists.map((a) => {
       const imgUrl = images.get(a.name);
       const imgEl = imgUrl
-        ? `<img src="${imgUrl}" alt="${a.name}" width="80" height="80" loading="lazy" />`
+        ? `<img src="${esc(imgUrl)}" alt="${esc(a.name)}" width="80" height="80" loading="lazy" />`
         : `<div class="img-placeholder" aria-hidden="true"></div>`;
       return `
         <div class="grid-item">
-          <a href="${a.url}" target="_blank" rel="noopener noreferrer">${imgEl}</a>
-          <span class="item-name">${a.name}</span>
+          <a href="${esc(a.url)}" target="_blank" rel="noopener noreferrer">${imgEl}</a>
+          <span class="item-name">${esc(a.name)}</span>
           <span class="item-meta">${formatPlaycount(a.playcount)}</span>
         </div>`;
     }).join('');
-    grid.classList.remove('skeleton-grid');
   }
 
   function renderAlbums(albums: AlbumStat[]) {
     const grid = document.getElementById('albums-grid')!;
     grid.innerHTML = albums.map((a) => {
       const imgEl = a.imageUrl
-        ? `<img src="${a.imageUrl}" alt="${a.name}" width="80" height="80" loading="lazy" />`
+        ? `<img src="${esc(a.imageUrl)}" alt="${esc(a.name)}" width="80" height="80" loading="lazy" />`
         : `<div class="img-placeholder" aria-hidden="true"></div>`;
       return `
         <div class="grid-item">
-          <a href="${a.url}" target="_blank" rel="noopener noreferrer">${imgEl}</a>
-          <span class="item-name">${a.name}</span>
-          <span class="item-meta">${a.artist} · ${formatPlaycount(a.playcount)}</span>
+          <a href="${esc(a.url)}" target="_blank" rel="noopener noreferrer">${imgEl}</a>
+          <span class="item-name">${esc(a.name)}</span>
+          <span class="item-meta">${esc(a.artist)} · ${formatPlaycount(a.playcount)}</span>
         </div>`;
     }).join('');
-    grid.classList.remove('skeleton-grid');
   }
 
   function renderTracks(tracks: Track[]) {
@@ -138,8 +144,8 @@ import Layout from '../layouts/Layout.astro';
     list.innerHTML = tracks.map((t) => `
       <div class="entry">
         <span class="entry-title">
-          <a href="${t.url}" target="_blank" rel="noopener noreferrer" class="link">${t.name}</a>
-          <span class="entry-sub">${t.artist}</span>
+          <a href="${esc(t.url)}" target="_blank" rel="noopener noreferrer" class="link">${esc(t.name)}</a>
+          <span class="entry-sub">${esc(t.artist)}</span>
         </span>
         <span class="entry-meta">${formatTimestamp(t.timestamp)}</span>
       </div>`).join('');
