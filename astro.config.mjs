@@ -4,7 +4,7 @@ import mdx from '@astrojs/mdx';
 
 export default defineConfig({
   output: 'static',
-  site: 'https://example.com',
+  site: 'https://stanleyp.dev',
   adapter: vercel(),
   integrations: [mdx()],
 });
