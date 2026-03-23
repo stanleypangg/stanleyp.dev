@@ -1,0 +1,192 @@
+---
+// WaveViz.astro — Ambient frequency-bar visualization above the footer.
+// Canvas 2D, generative sine composition. Reacts to playback state via DOM observation.
+// Shows a ⏸ icon when music is paused (home page only). Pauses RAF off-screen.
+---
+
+<div id="wave-wrap" class="wave-wrap" data-paused="false">
+  <canvas
+    id="wave-viz"
+    class="wave-viz"
+    aria-hidden="true"
+    role="presentation"
+  ></canvas>
+</div>
+
+<style>
+  .wave-wrap {
+    position: relative;
+    margin-top: 2.5rem;
+  }
+
+  .wave-viz {
+    display: block;
+    width: 100%;
+    height: 52px;
+    cursor: crosshair;
+  }
+
+</style>
+
+<script>
+  let _cleanup: (() => void) | null = null;
+
+  function initWaveViz() {
+    _cleanup?.();
+    _cleanup = null;
+
+    const wrap   = document.getElementById('wave-wrap')  as HTMLDivElement      | null;
+    const canvas = document.getElementById('wave-viz')   as HTMLCanvasElement   | null;
+    if (!canvas || !wrap) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // ── Constants ───────────────────────────────────────────────
+    const PITCH      = 6;     // px per column (bar + gap)
+    const BAR_W      = 2;     // bar width px
+    const MIN_H      = 3;     // minimum bar height px
+    const HOVER_RATE = 0.08;  // lerp speed: hover color
+    const PLAY_RATE  = 0.018; // lerp speed: playing ↔ paused (slow, graceful)
+
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    // Is NowPlaying present on this page? Computed once per page load.
+    // On other pages (projects, writing…) we use a neutral ambient level.
+    const npPresent = !!document.getElementById('np-wrap');
+
+    let logW = 0, logH = 0;
+    let rafId = 0;
+    let startTs: number | null = null;
+    let visible = true;
+    let hoverLerp   = 0;
+    let hoverTarget = 0;
+    let playLerp    = npPresent ? 0 : 0.55; // start at ambient on non-home pages
+    let playTarget  = npPresent ? 0 : 0.55;
+
+    // ── Canvas setup ────────────────────────────────────────────
+    function setup() {
+      const dpr  = window.devicePixelRatio || 1;
+      const rect = canvas!.getBoundingClientRect();
+      logW = rect.width;
+      logH = rect.height;
+      canvas!.width  = Math.round(logW * dpr);
+      canvas!.height = Math.round(logH * dpr);
+      ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+
+    // ── Bar color ────────────────────────────────────────────────
+    // Lightens toward --subtle on hover; brightens (more contrast) when playing.
+    function barColor(): string {
+      const dark = document.documentElement.classList.contains('dark');
+      if (dark) {
+        const lBase  = 20 + 14 * playLerp;   // 20% paused → 34% playing
+        const lFinal = lBase + 15 * hoverLerp;
+        return `oklch(${lFinal.toFixed(1)}% 0.003 260)`;
+      } else {
+        const lBase  = 87 - 13 * playLerp;   // 87% paused → 74% playing
+        const lFinal = lBase - 13 * hoverLerp;
+        return `oklch(${lFinal.toFixed(1)}% 0.003 80)`;
+      }
+    }
+
+    // ── Draw one frame ──────────────────────────────────────────
+    function draw(t: number) {
+      ctx!.clearRect(0, 0, logW, logH);
+      ctx!.fillStyle = barColor();
+
+      // Amplitude: wide contrast between paused (0.2) and playing (1.0)
+      // so the state change is unmistakable.
+      const amp = 0.20 + 0.80 * playLerp;
+
+      const N = Math.floor(logW / PITCH);
+      for (let i = 0; i < N; i++) {
+        const xn = i / N;
+
+        const wave =
+          amp * (
+            1.00 * Math.sin(t * 1.88 + xn * 9.42) +
+            0.35 * Math.sin(t * 1.19 + xn * 18.85 + 1.5) +
+            0.20 * Math.sin(t * 3.20 + xn * 28.27 + 0.8)
+          );
+        // wave range: approx [-1.55·amp, 1.55·amp]; normalise to [0, 1]
+        const norm = (wave + 1.55) / 3.1;
+        const h    = MIN_H + (logH - MIN_H) * Math.max(0, Math.min(1, norm));
+
+        ctx!.fillRect(i * PITCH, logH - h, BAR_W, h);
+      }
+    }
+
+    // ── Animation loop ──────────────────────────────────────────
+    function tick(ts: number) {
+      if (startTs === null) startTs = ts;
+      const t = (ts - startTs) / 1000;
+
+      // Advance lerps
+      hoverLerp += (hoverTarget - hoverLerp) * HOVER_RATE;
+      playLerp  += (playTarget  - playLerp)  * PLAY_RATE;
+
+      // Detect playing state — zero coupling with NowPlaying component
+      if (npPresent) {
+        playTarget = document.querySelector('.np-wave--live') ? 1 : 0;
+        wrap!.dataset.paused = String(playTarget === 0);
+      }
+      // On other pages: playTarget stays at 0.55 (ambient), no pause icon ever shown.
+
+      draw(t);
+
+      if (visible) {
+        rafId = requestAnimationFrame(tick);
+      } else {
+        rafId = 0;
+      }
+    }
+
+    // ── Init ────────────────────────────────────────────────────
+    setup();
+
+    if (reducedMotion) {
+      draw(0);
+    } else {
+      rafId = requestAnimationFrame(tick);
+    }
+
+    // Hover brightening
+    canvas.addEventListener('mouseenter', () => { hoverTarget = 1; });
+    canvas.addEventListener('mouseleave', () => { hoverTarget = 0; });
+
+    // Pause RAF when scrolled off-screen
+    const io = new IntersectionObserver(([entry]) => {
+      visible = entry.isIntersecting;
+      if (visible && !reducedMotion && rafId === 0) {
+        startTs = null;
+        rafId = requestAnimationFrame(tick);
+      }
+    });
+    io.observe(canvas);
+
+    // Resize
+    const ro = new ResizeObserver(() => {
+      cancelAnimationFrame(rafId);
+      rafId = 0;
+      setup();
+      if (reducedMotion) {
+        draw(0);
+      } else {
+        startTs = null;
+        rafId = requestAnimationFrame(tick);
+      }
+    });
+    ro.observe(canvas);
+
+    function cleanup() {
+      cancelAnimationFrame(rafId);
+      io.disconnect();
+      ro.disconnect();
+    }
+
+    _cleanup = cleanup;
+    document.addEventListener('astro:before-swap', cleanup, { once: true });
+  }
+
+  document.addEventListener('astro:page-load', initWaveViz);
+</script>
