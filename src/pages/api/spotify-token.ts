@@ -1,18 +1,17 @@
 export const prerender = false;
 
+const TOKEN_URL = 'https://accounts.spotify.com/api/token';
+
 // Extracted for unit-testability: accepts credentials as arguments.
 export async function getSpotifyClientToken(
   clientId: string,
   clientSecret: string,
 ): Promise<Response> {
   if (!clientId || !clientSecret) {
-    return new Response(JSON.stringify({ error: 'Spotify credentials not configured' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return json({ error: 'Spotify credentials not configured' }, 500);
   }
 
-  const res = await fetch('https://accounts.spotify.com/api/token', {
+  const res = await fetch(TOKEN_URL, {
     method: 'POST',
     headers: {
       Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
@@ -22,23 +21,15 @@ export async function getSpotifyClientToken(
   });
 
   if (!res.ok) {
-    return new Response(JSON.stringify({ error: 'Spotify token request failed' }), {
-      status: 502,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return json({ error: 'Spotify token request failed' }, 502);
   }
 
   const data = await res.json();
 
-  return new Response(
-    JSON.stringify({ access_token: data.access_token, expires_in: data.expires_in }),
-    {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Cache-Control': 's-maxage=3500, stale-while-revalidate=100',
-      },
-    },
+  return json(
+    { access_token: data.access_token, expires_in: data.expires_in },
+    200,
+    { 'Cache-Control': 's-maxage=3500, stale-while-revalidate=100' },
   );
 }
 
@@ -47,4 +38,11 @@ export async function GET() {
     import.meta.env.SPOTIFY_CLIENT_ID,
     import.meta.env.SPOTIFY_CLIENT_SECRET,
   );
+}
+
+function json(data: unknown, status = 200, extraHeaders: Record<string, string> = {}) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { 'Content-Type': 'application/json', ...extraHeaders },
+  });
 }
