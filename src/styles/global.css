@@ -386,6 +386,11 @@ main {
   .elsewhere-link:hover {
     padding-left: 0;
   }
+
+  /* Remove transform from theme toggle — keep color-only */
+  .theme-btn::after {
+    transition: background-color 250ms;
+  }
 }
 
 /* ── Prose (blog post body) ────────────────────────────────── */
