@@ -56,8 +56,8 @@ const isMusic   = pathname.startsWith('/music');
     <div class="wrap">
       <nav class="site-nav">
         <div class="nav-inner">
-          <a href="/" class="nav-home">
-            <img src="/logo.png" alt="Logo" class="nav-logo" width="28" height="28" />
+          <a href="/" class="nav-home" aria-label="Home">
+            <img src="/logo.png" alt="" class="nav-logo" width="28" height="28" />
           </a>
           <ul class="nav-links">
             <li>
@@ -93,6 +93,11 @@ const isMusic   = pathname.startsWith('/music');
       </main>
 
       <footer class="site-footer">
+        <ul class="footer-links">
+          <li><a href="#" class="elsewhere-link">GitHub</a></li>
+          <li><a href="#" class="elsewhere-link">LinkedIn</a></li>
+          <li><a href="#" class="elsewhere-link">Email</a></li>
+        </ul>
         <span class="footer-updated">Updated {lastUpdated}</span>
       </footer>
     </div>
