@@ -1,22 +1,28 @@
 ---
 import Layout from '../layouts/Layout.astro';
-import { mapResource, sortNewestFirst } from '../lib/cloudinary';
+import { mapResource, sortNewestFirst, type Photo } from '../lib/cloudinary';
 
 const { CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET } = import.meta.env;
 
-let photos: { src: string; alt: string; date: string; caption?: string }[] = [];
+let photos: Photo[] = [];
 
 if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
-  const res = await fetch(
-    `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/resources/image?type=upload&prefix=pictures/&max_results=500`,
-    {
-      headers: {
-        Authorization: `Basic ${btoa(`${CLOUDINARY_API_KEY}:${CLOUDINARY_API_SECRET}`)}`,
-      },
+  try {
+    const res = await fetch(
+      `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/resources/image?type=upload&prefix=pictures/&max_results=500`,
+      {
+        headers: {
+          Authorization: `Basic ${btoa(`${CLOUDINARY_API_KEY}:${CLOUDINARY_API_SECRET}`)}`,
+        },
+      }
+    );
+    if (res.ok) {
+      const { resources } = await res.json();
+      photos = sortNewestFirst(resources).map(r => mapResource(CLOUDINARY_CLOUD_NAME as string, r));
     }
-  );
-  const { resources } = await res.json();
-  photos = sortNewestFirst(resources).map(r => mapResource(CLOUDINARY_CLOUD_NAME as string, r));
+  } catch {
+    // network error — show empty state
+  }
 }
 ---
 
