@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 100 100">
+  <defs>
+    <filter id="inv" color-interpolation-filters="sRGB">
+      <feColorMatrix type="matrix"
+        values="-1 0 0 0 1
+                 0 -1 0 0 1
+                 0  0 -1 0 1
+                 0  0  0 1 0"/>
+    </filter>
+  </defs>
+  <style>
+    .bg { fill: oklch(10.5% 0.003 260); }
+    .char { filter: none; }
+    @media (prefers-color-scheme: light) {
+      .bg { fill: oklch(97.5% 0.004 80); }
+      .char { filter: url(#inv); }
+    }
+  </style>
+  <rect class="bg" width="100" height="100"/>
+  <image class="char" href="/logo.png" x="4" y="4" width="92" height="92" preserveAspectRatio="xMidYMid meet"/>
+</svg>
