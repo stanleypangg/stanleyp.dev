@@ -1,0 +1,107 @@
+export const prerender = false;
+
+import { createHash } from 'node:crypto';
+import { createServerClient } from '../../lib/supabase';
+import LeoProfanity from 'leo-profanity';
+
+LeoProfanity.clearList();
+const blockedWords = (import.meta.env.BLOCKED_WORDS || '').split(',').map((w: string) => w.trim()).filter(Boolean);
+if (blockedWords.length > 0) LeoProfanity.add(blockedWords);
+
+const BLOCKED = (import.meta.env.BLOCKED_WORDS || '').split(',').map((w: string) => w.trim().toLowerCase()).filter(Boolean);
+
+function containsBlocked(text: string): boolean {
+  if (BLOCKED.length === 0) return false;
+  const normalized = text.toLowerCase().replace(/[^a-z]/g, '');
+  return BLOCKED.some((w: string) => normalized.includes(w));
+}
+
+function hashIp(ip: string): string {
+  const salt = import.meta.env.IP_SALT || import.meta.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  return createHash('sha256')
+    .update(ip + salt)
+    .digest('hex')
+    .slice(0, 16);
+}
+
+export async function POST({ request, clientAddress }: { request: Request; clientAddress: string }) {
+  const contentType = request.headers.get('content-type');
+  if (!contentType?.includes('application/json')) {
+    return json({ error: 'Invalid content type' }, 400);
+  }
+
+  let body: { display_name?: unknown; content?: unknown };
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: 'Invalid JSON' }, 400);
+  }
+
+  const { display_name, content } = body;
+
+  if (
+    typeof display_name !== 'string' ||
+    display_name.trim().length === 0 ||
+    display_name.trim().length > 32
+  ) {
+    return json({ error: 'Display name must be 1–32 characters' }, 400);
+  }
+
+  if (
+    typeof content !== 'string' ||
+    content.trim().length === 0 ||
+    content.trim().length > 500
+  ) {
+    return json({ error: 'Message must be 1–500 characters' }, 400);
+  }
+
+  const ip = clientAddress || request.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
+  if (!ip) {
+    return json({ error: 'Unable to determine client IP' }, 400);
+  }
+  const ipHash = hashIp(ip);
+
+  const supabase = createServerClient();
+
+  // Rate limit: query DB for most recent message from this IP hash
+  const { data: recent } = await supabase
+    .from('chat_messages')
+    .select('created_at')
+    .eq('ip_hash', ipHash)
+    .order('created_at', { ascending: false })
+    .limit(1);
+
+  if (recent?.[0]) {
+    const lastSent = new Date(recent[0].created_at).getTime();
+    if (Date.now() - lastSent < 5_000) {
+      return json({ error: 'Too fast. Wait a few seconds.' }, 429);
+    }
+  }
+
+  if (
+    LeoProfanity.check(display_name.trim()) || LeoProfanity.check(content.trim()) ||
+    containsBlocked(display_name.trim()) || containsBlocked(content.trim())
+  ) {
+    return json({ error: 'Message contains prohibited content' }, 400);
+  }
+
+  const { error } = await supabase.from('chat_messages').insert({
+    display_name: display_name.trim(),
+    content: content.trim(),
+    ip_hash: ipHash,
+  });
+
+  if (error) {
+    console.error('[chat] Insert failed:', error.message);
+    return json({ error: 'Failed to send message' }, 500);
+  }
+
+  return json({ ok: true }, 201);
+}
+
+function json(data: unknown, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}

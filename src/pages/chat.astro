@@ -1,0 +1,452 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="Chat — Stanley Pang" description="Say something.">
+  <div class="chat-wrap">
+    <header class="page-header">
+      <h1 class="page-title">Chat</h1>
+    </header>
+
+    <div style="margin-top: 1.5rem;"></div>
+
+    <div
+      class="chat-feed"
+      id="chat-feed"
+      role="log"
+      aria-live="polite"
+      aria-label="Chat messages"
+    ></div>
+
+    <dialog id="chat-blocked" class="chat-dialog">
+      <p>please don't send that.</p>
+      <button autofocus>ok</button>
+    </dialog>
+
+    <form class="chat-form" id="chat-form" autocomplete="off" novalidate>
+      <input
+        type="text"
+        id="chat-name"
+        class="chat-input chat-input--name"
+        placeholder="name"
+        maxlength="32"
+        required
+        aria-label="Display name"
+      />
+      <input
+        type="text"
+        id="chat-msg"
+        class="chat-input chat-input--msg"
+        placeholder="say something..."
+        maxlength="500"
+        required
+        aria-label="Message"
+      />
+      <button type="submit" class="chat-send" aria-label="Send message">↵</button>
+    </form>
+  </div>
+</Layout>
+
+<script>
+  import { createBrowserClient } from '../lib/supabase';
+  import type { ChatMessage } from '../lib/supabase';
+  import type { RealtimeChannel } from '@supabase/supabase-js';
+  import { esc } from '../lib/music-utils';
+
+  let channel: RealtimeChannel | null = null;
+
+  function formatTime(iso: string): string {
+    return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function renderMessage(msg: ChatMessage, isNew = false): string {
+    return `<div class="chat-line${isNew ? ' chat-line--new' : ''}">
+      <span class="chat-time">${formatTime(msg.created_at)}</span>
+      <span class="chat-name">${esc(msg.display_name)}</span>
+      <span class="chat-text">${esc(msg.content)}</span>
+    </div>`;
+  }
+
+  function appendMessage(msg: ChatMessage) {
+    const feed = document.getElementById('chat-feed');
+    if (!feed) return;
+    const empty = feed.querySelector('.chat-empty');
+    if (empty) empty.remove();
+    feed.insertAdjacentHTML('beforeend', renderMessage(msg, true));
+    feed.scrollTop = feed.scrollHeight;
+  }
+
+  async function init() {
+    const feed = document.getElementById('chat-feed');
+    const form = document.getElementById('chat-form') as HTMLFormElement | null;
+    const nameInput = document.getElementById('chat-name') as HTMLInputElement | null;
+    const msgInput = document.getElementById('chat-msg') as HTMLInputElement | null;
+    if (!feed || !form || !nameInput || !msgInput) return;
+
+    // Restore saved display name
+    try {
+      const saved = localStorage.getItem('chat_display_name');
+      if (saved) nameInput.value = saved;
+    } catch {}
+
+    // Loading state
+    feed.innerHTML = '<div class="chat-spinner" aria-label="Loading"></div>';
+
+    const supabase = createBrowserClient();
+
+    const { data: messages, error } = await supabase
+      .from('chat_messages')
+      .select('id, display_name, content, created_at')
+      .order('created_at', { ascending: true })
+      .limit(50);
+
+    if (error) {
+      feed.innerHTML = '<p class="chat-empty">failed to load messages.</p>';
+      return;
+    }
+
+    if (messages.length === 0) {
+      feed.innerHTML = '<p class="chat-empty">no messages yet.</p>';
+    } else {
+      feed.innerHTML = (messages as ChatMessage[]).map((m) => renderMessage(m)).join('');
+      feed.scrollTop = feed.scrollHeight;
+    }
+
+    // Realtime subscription
+    channel = supabase
+      .channel('chat-room')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'chat_messages' },
+        (payload) => { appendMessage(payload.new as ChatMessage); },
+      )
+      .subscribe();
+
+    // Form submit
+    let sending = false;
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (sending) return;
+
+      const display_name = nameInput.value.trim();
+      const content = msgInput.value.trim();
+      if (!display_name || !content) return;
+
+      sending = true;
+      setFormState(form, true);
+
+      try {
+        localStorage.setItem('chat_display_name', display_name);
+      } catch {}
+
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ display_name, content }),
+        });
+
+        if (res.ok) {
+          msgInput.value = '';
+        } else {
+          const data: { error?: string } = await res.json().catch(() => ({ error: 'Send failed' }));
+          if (res.status === 400 && data.error === 'Message contains prohibited content') {
+            (document.getElementById('chat-blocked') as HTMLDialogElement)?.showModal();
+          } else {
+            showError(msgInput, data.error || 'Send failed');
+          }
+        }
+      } catch {
+        showError(msgInput, 'Network error');
+      } finally {
+        sending = false;
+        setFormState(form, false);
+        msgInput.focus();
+      }
+    });
+  }
+
+  let formTimeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  function setFormState(form: HTMLFormElement, disabled: boolean) {
+    const btn = form.querySelector('button') as HTMLButtonElement | null;
+    const inputs = form.querySelectorAll('input');
+    if (btn) btn.disabled = disabled;
+    inputs.forEach((i) => { (i as HTMLInputElement).style.opacity = disabled ? '0.5' : ''; });
+    if (formTimeoutId) { clearTimeout(formTimeoutId); formTimeoutId = undefined; }
+    if (disabled) {
+      formTimeoutId = setTimeout(() => {
+        if (btn) btn.disabled = false;
+        inputs.forEach((i) => { (i as HTMLInputElement).style.opacity = ''; });
+        formTimeoutId = undefined;
+      }, 5000);
+    }
+  }
+
+  function showError(input: HTMLInputElement, msg: string) {
+    input.setCustomValidity(msg);
+    input.reportValidity();
+    setTimeout(() => input.setCustomValidity(''), 3000);
+  }
+
+  function cleanup() {
+    if (channel) {
+      channel.unsubscribe();
+      channel = null;
+    }
+  }
+
+  document.addEventListener('astro:page-load', () => {
+    init();
+    const dialog = document.getElementById('chat-blocked') as HTMLDialogElement | null;
+    dialog?.querySelector('button')?.addEventListener('click', () => dialog.close());
+  });
+  document.addEventListener('astro:before-swap', cleanup);
+</script>
+
+<style>
+  /* ── Page wrapper — fills main flex column ─────────────── */
+  .chat-wrap {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  /* ── Header ────────────────────────────────────────────── */
+  .page-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    animation: enter-up 560ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .page-title {
+    font-family: var(--font-display);
+    font-weight: 300;
+    font-optical-sizing: auto;
+    font-size: var(--text-lg);
+    letter-spacing: -0.01em;
+  }
+
+  /* ── Feed ──────────────────────────────────────────────── */
+  .chat-feed {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    min-height: 8rem;
+    max-height: 60vh;
+    margin-bottom: 1.25rem;
+    padding-right: 0.25rem;
+    animation: enter-up 560ms cubic-bezier(0.16, 1, 0.3, 1) 90ms both;
+  }
+
+  .chat-feed::-webkit-scrollbar        { width: 3px; }
+  .chat-feed::-webkit-scrollbar-track  { background: transparent; }
+  .chat-feed::-webkit-scrollbar-thumb  { background: var(--border); border-radius: 2px; }
+  .chat-feed::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+  /* :global() — innerHTML-injected message elements */
+  :global(.chat-line) {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    font-size: var(--text-xs);
+    font-family: var(--font-text);
+    font-weight: 300;
+    line-height: 1.6;
+  }
+
+  :global(.chat-line--new) {
+    animation: msg-in 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  :global(.chat-time) {
+    color: var(--subtle);
+    font-size: var(--text-2xs);
+    font-variant-numeric: tabular-nums;
+    width: 4.5rem;
+    flex-shrink: 0;
+  }
+
+  :global(.chat-name) {
+    color: var(--fg);
+    font-weight: 300;
+    width: 6rem;
+    flex-shrink: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  :global(.chat-name)::after {
+    content: ':';
+    color: var(--subtle);
+  }
+
+  :global(.chat-text) {
+    color: var(--muted);
+    word-break: break-word;
+  }
+
+  .chat-empty {
+    font-size: var(--text-xs);
+    color: var(--subtle);
+    font-family: var(--font-text);
+    font-weight: 300;
+  }
+
+  .chat-spinner {
+    width: 20px;
+    height: 20px;
+    border: 1.5px solid var(--border);
+    border-top-color: var(--muted);
+    border-radius: 50%;
+    animation: spin 700ms linear infinite;
+    margin: auto;
+    align-self: center;
+  }
+
+  @keyframes spin {
+    to { rotate: 360deg; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .chat-spinner { animation: none; opacity: 0.4; }
+  }
+
+  /* ── Form ──────────────────────────────────────────────── */
+  .chat-form {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    border-top: 1px solid var(--border);
+    padding-top: 0.75rem;
+    flex-shrink: 0;
+    animation: enter-up 560ms cubic-bezier(0.16, 1, 0.3, 1) 160ms both;
+  }
+
+  .chat-input {
+    font-family: var(--font-text);
+    font-size: var(--text-xs);
+    font-weight: 300;
+    color: var(--fg);
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    padding: 0.4rem 0;
+    outline: none;
+    transition: border-color 200ms, opacity 200ms;
+  }
+
+  .chat-input::placeholder {
+    color: var(--subtle);
+  }
+
+  .chat-input:focus {
+    border-bottom-color: var(--fg);
+  }
+
+  .chat-input--name { width: 7rem; flex-shrink: 0; }
+  .chat-input--msg  { flex: 1; min-width: 0; }
+
+  .chat-send {
+    font-family: var(--font-text);
+    font-size: var(--text-sm);
+    color: var(--subtle);
+    background: none;
+    border: none;
+    cursor: pointer;
+    /* 44×44px minimum touch target */
+    min-width: 44px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    line-height: 1;
+    transition: color 200ms;
+    margin-right: -0.5rem; /* optical alignment */
+  }
+
+  .chat-send:hover  { color: var(--fg); }
+  .chat-send:active { color: var(--muted); }
+  .chat-send:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+
+  /* ── Blocked dialog ────────────────────────────────────── */
+  .chat-dialog {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--bg);
+    color: var(--fg);
+    padding: 1.5rem 2rem;
+    max-width: 280px;
+    width: 90%;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    translate: -50% -50%;
+    margin: 0;
+  }
+
+  .chat-dialog::backdrop {
+    background: oklch(0% 0 0 / 0.4);
+  }
+
+  .chat-dialog p {
+    font-family: var(--font-text);
+    font-size: var(--text-sm);
+    font-weight: 300;
+    margin: 0 0 1.25rem;
+  }
+
+  .chat-dialog button {
+    font-family: var(--font-text);
+    font-size: var(--text-xs);
+    font-weight: 300;
+    color: var(--subtle);
+    background: none;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    padding: 0.2rem 0;
+    cursor: pointer;
+    transition: color 200ms;
+  }
+
+  .chat-dialog button:hover { color: var(--fg); }
+
+  /* ── Animations ────────────────────────────────────────── */
+  @keyframes enter-up {
+    from { opacity: 0; translate: 0 10px; }
+    to   { opacity: 1; translate: 0 0;   }
+  }
+
+  @keyframes msg-in {
+    from { opacity: 0; translate: 0 4px; }
+    to   { opacity: 1; translate: 0 0;  }
+  }
+
+  /* ── Reduced motion ────────────────────────────────────── */
+  @media (prefers-reduced-motion: reduce) {
+    .page-header,
+    .chat-feed,
+    .chat-form {
+      animation: none;
+    }
+    :global(.chat-line--new) {
+      animation: none;
+    }
+    .chat-input,
+    .chat-send {
+      transition: opacity 200ms;
+    }
+  }
+</style>
