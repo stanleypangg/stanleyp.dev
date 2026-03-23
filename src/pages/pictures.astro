@@ -1,0 +1,112 @@
+---
+import Layout from '../layouts/Layout.astro';
+import { mapResource, sortNewestFirst } from '../lib/cloudinary';
+
+const { CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET } = import.meta.env;
+
+let photos: { src: string; alt: string; date: string; caption?: string }[] = [];
+
+if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
+  const res = await fetch(
+    `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/resources/image?type=upload&prefix=pictures/&max_results=500`,
+    {
+      headers: {
+        Authorization: `Basic ${btoa(`${CLOUDINARY_API_KEY}:${CLOUDINARY_API_SECRET}`)}`,
+      },
+    }
+  );
+  const { resources } = await res.json();
+  photos = sortNewestFirst(resources).map(r => mapResource(CLOUDINARY_CLOUD_NAME as string, r));
+}
+---
+
+<Layout title="Pictures — Stanley Pang" description="Photos by Stanley Pang.">
+  <header class="page-header">
+    <h1 class="page-title">Pictures</h1>
+    {photos.length > 0 && (
+      <p class="page-sub">{photos.length} {photos.length === 1 ? 'photo' : 'photos'}</p>
+    )}
+  </header>
+
+  <hr class="rule" />
+
+  {photos.length === 0 ? (
+    <p class="empty">Nothing here yet.</p>
+  ) : (
+    <ul class="photo-list">
+      {photos.map((photo, i) => (
+        <li class="photo-item">
+          <span class="index-num">{String(i + 1).padStart(2, '0')}</span>
+          <img
+            src={photo.src}
+            alt={photo.alt}
+            class="photo-img"
+            loading="lazy"
+          />
+          {(photo.caption || photo.date) && (
+            <div class="photo-meta entry">
+              {photo.caption && <span class="photo-caption">{photo.caption}</span>}
+              {photo.date && <span class="entry-meta">{photo.date}</span>}
+            </div>
+          )}
+        </li>
+      ))}
+    </ul>
+  )}
+</Layout>
+
+<style>
+  .page-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .page-title {
+    font-family: var(--font-display);
+    font-weight: 300;
+    font-optical-sizing: auto;
+    font-size: var(--text-lg);
+    letter-spacing: -0.01em;
+  }
+
+  .page-sub {
+    font-size: var(--text-xs);
+    color: var(--muted);
+  }
+
+  .photo-list {
+    display: flex;
+    flex-direction: column;
+    gap: 3rem;
+    list-style: none;
+  }
+
+  .photo-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .photo-img {
+    width: 100%;
+    height: auto;
+    display: block;
+    filter: saturate(0.88);
+    transition: filter 300ms;
+  }
+
+  .photo-img:hover {
+    filter: saturate(1);
+  }
+
+  .photo-meta {
+    margin-top: 0.1rem;
+  }
+
+  .photo-caption {
+    font-size: var(--text-xs);
+    color: var(--muted);
+  }
+</style>
