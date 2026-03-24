@@ -15,7 +15,7 @@ const { Content } = await render(entry);
 ---
 
 <Layout
-  title={`${entry.data.title} — Stanley Pang`}
+  title={entry.data.title}
   description={entry.data.description}
 >
   <article class="project-detail">
@@ -74,11 +74,6 @@ const { Content } = await render(entry);
     animation: enter-up 560ms cubic-bezier(0.16, 1, 0.3, 1) both;
   }
 
-  @keyframes enter-up {
-    from { opacity: 0; translate: 0 10px; }
-    to   { opacity: 1; translate: 0 0;   }
-  }
-
   .project-header {
     display: flex;
     flex-direction: column;
@@ -132,11 +127,11 @@ const { Content } = await render(entry);
     font-size: var(--text-xs);
     color: var(--muted);
     display: inline-block;
-    transition: color 200ms, padding-left 400ms cubic-bezier(0.16, 1, 0.3, 1);
+    transition: color 200ms, transform 400ms cubic-bezier(0.16, 1, 0.3, 1);
   }
   .back-link:hover {
     color: var(--fg);
-    padding-left: 0.25rem;
+    transform: translateX(0.25rem);
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -147,7 +142,7 @@ const { Content } = await render(entry);
       transition: color 200ms;
     }
     .back-link:hover {
-      padding-left: 0;
+      transform: none;
     }
   }
 </style>

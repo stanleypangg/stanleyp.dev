@@ -8,40 +8,72 @@ const posts = (await getCollection('writing', ({ data }) => !data.draft))
   .sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf());
 ---
 
-<Layout title="Writing — Stanley Pang" description="Writing by Stanley Pang.">
-  <header class="page-header">
-    <h1 class="page-title">Writing</h1>
-    {posts.length > 0 && (
-      <p class="page-sub">{posts.length} {posts.length === 1 ? 'post' : 'posts'}</p>
+<Layout title="Writing" description="Writing by Stanley Pang.">
+  <div class="writing-wrap">
+    <header class="page-header">
+      <h1 class="page-title">Writing</h1>
+      {posts.length > 0 && (
+        <p class="page-sub">{posts.length} {posts.length === 1 ? 'post' : 'posts'}</p>
+      )}
+    </header>
+    <hr class="rule" />
+
+    {posts.length === 0 ? (
+      <p class="empty">Nothing here yet.</p>
+    ) : (
+      <ul class="index-list">
+        {posts.map((post) => (
+          <li class="post-item">
+            <div class="entry">
+              <a href={`/writing/${post.id.replace(/\.mdx?$/, '')}`} class="post-title">
+                {post.data.title}
+              </a>
+              <span class="entry-meta">{fmt.format(post.data.date)}</span>
+            </div>
+          </li>
+        ))}
+      </ul>
     )}
-  </header>
-
-  <div style="margin-top: 1.5rem;"></div>
-
-  {posts.length === 0 ? (
-    <p class="empty">Nothing here yet.</p>
-  ) : (
-    <ul class="index-list">
-      {posts.map((post) => (
-        <li class="post-item">
-          <div class="entry">
-            <a href={`/writing/${post.id.replace(/\.mdx?$/, '')}`} class="post-title">
-              {post.data.title}
-            </a>
-            <span class="entry-meta">{fmt.format(post.data.date)}</span>
-          </div>
-        </li>
-      ))}
-    </ul>
-  )}
+  </div>
 </Layout>
 
 <style>
+  .writing-wrap {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: clip;
+  }
+
+  /* ── Page entrance ─────────────────────────────────────────── */
+  .index-list,
+  .empty {
+    animation: enter-up 560ms cubic-bezier(0.16, 1, 0.3, 1) 80ms both;
+  }
+
+  .index-list {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    min-height: 0;
+    padding-top: 0.5rem;
+    padding-bottom: 1rem;
+    padding-right: 0.25rem;
+  }
+
+  /* Thin, minimal scrollbar */
+  .index-list::-webkit-scrollbar        { width: 3px; }
+  .index-list::-webkit-scrollbar-track  { background: transparent; }
+  .index-list::-webkit-scrollbar-thumb  { background: var(--border); border-radius: 2px; }
+  .index-list::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
   .page-header {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
     gap: 1rem;
+    animation: enter-up 560ms cubic-bezier(0.16, 1, 0.3, 1) both;
   }
 
   .page-title {
@@ -66,17 +98,25 @@ const posts = (await getCollection('writing', ({ data }) => !data.draft))
   .post-title {
     font-size: var(--text-sm);
     font-weight: 300;
-    transition: color 200ms, padding-left 400ms cubic-bezier(0.16, 1, 0.3, 1);
+    transition: color 200ms, transform 400ms cubic-bezier(0.16, 1, 0.3, 1);
     display: inline-block;
   }
   .post-title:hover {
     color: var(--muted);
-    padding-left: 0.25rem;
+    transform: translateX(0.25rem);
   }
 
   @media (prefers-reduced-motion: reduce) {
+    .page-header,
+    .index-list,
+    .empty {
+      animation: none;
+    }
     .post-title {
       transition: color 200ms;
+    }
+    .post-title:hover {
+      transform: none;
     }
   }
 </style>

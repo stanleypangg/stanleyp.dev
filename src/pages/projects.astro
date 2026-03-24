@@ -6,12 +6,13 @@ const projects = (await getCollection('projects'))
   .sort((a, b) => a.data.order - b.data.order);
 ---
 
-<Layout title="Projects — Stanley Pang" description="Projects by Stanley Pang.">
+<Layout title="Projects" description="Projects by Stanley Pang.">
   <div class="projects-wrap">
   <header class="page-header">
     <h1 class="page-title">Projects</h1>
     <p class="page-sub">{projects.length} projects</p>
   </header>
+  <hr class="rule" />
 
   <ul class="index-list">
     {projects.map((project, i) => {
@@ -64,13 +65,15 @@ const projects = (await getCollection('projects'))
 </Layout>
 
 <style>
-  /* Fill available main height; list scrolls within */
+  /* Fill available main height; list scrolls within.
+     overflow: clip instead of hidden so focus rings on child links
+     are not clipped (clip does not create a scroll container). */
   .projects-wrap {
     flex: 1;
     display: flex;
     flex-direction: column;
     min-height: 0;
-    overflow: hidden;
+    overflow: clip;
   }
 
   .page-header {
@@ -105,11 +108,11 @@ const projects = (await getCollection('projects'))
     font-size: var(--text-sm);
     font-weight: 300;
     display: inline-block;
-    transition: color 200ms, padding-left 400ms cubic-bezier(0.16, 1, 0.3, 1);
+    transition: color 200ms, transform 400ms cubic-bezier(0.16, 1, 0.3, 1);
   }
   .project-title:hover {
     color: var(--muted);
-    padding-left: 0.25rem;
+    transform: translateX(0.25rem);
   }
   /* Dark mode: grayscale antialiasing renders 300-weight thin; nudge to 400 */
   :global(html.dark) .project-title {
@@ -151,11 +154,6 @@ const projects = (await getCollection('projects'))
   }
 
   /* ── Page entrance ─────────────────────────────────────────── */
-  @keyframes enter-up {
-    from { opacity: 0; translate: 0 10px; }
-    to   { opacity: 1; translate: 0 0;   }
-  }
-
   .page-header {
     animation: enter-up 560ms cubic-bezier(0.16, 1, 0.3, 1) both;
   }
@@ -165,10 +163,10 @@ const projects = (await getCollection('projects'))
     overflow-y: auto;
     overflow-x: hidden;
     min-height: 0;
-    padding-top: 2.5rem;
+    padding-top: 0.5rem;
     padding-bottom: 1rem;
     padding-right: 0.25rem;
-    animation: enter-up 560ms cubic-bezier(0.16, 1, 0.3, 1) 90ms both;
+    animation: enter-up 560ms cubic-bezier(0.16, 1, 0.3, 1) 80ms both;
   }
 
   /* Thin, minimal scrollbar */
@@ -186,7 +184,7 @@ const projects = (await getCollection('projects'))
       transition: color 200ms;
     }
     .project-title:hover {
-      padding-left: 0;
+      transform: none;
     }
   }
 </style>

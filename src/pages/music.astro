@@ -38,7 +38,7 @@ if (artists.length > 0) {
 Astro.response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=600');
 ---
 
-<Layout title="Listening — Stanley Pang" description="Music I've been listening to.">
+<Layout title="Listening" description="Music I've been listening to.">
   <header class="page-header">
     <h1 class="page-title">Listening history</h1>
     <a
@@ -54,22 +54,22 @@ Astro.response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=300, s
   <!-- Controls: period + view toggle -->
   <div class="toggle controls-row" role="group" aria-label="Controls">
     <div class="period-group" role="group" aria-label="Time period">
-      <button class="toggle-btn active" data-period="7day">7d</button>
-      <button class="toggle-btn" data-period="1month">1m</button>
-      <button class="toggle-btn" data-period="12month">1y</button>
-      <button class="toggle-btn" data-period="overall">all time</button>
+      <button class="toggle-btn active" data-period="7day" aria-pressed="true" aria-label="Last 7 days">7d</button>
+      <button class="toggle-btn" data-period="1month" aria-pressed="false" aria-label="Last month">1m</button>
+      <button class="toggle-btn" data-period="12month" aria-pressed="false" aria-label="Last year">1y</button>
+      <button class="toggle-btn" data-period="overall" aria-pressed="false">all time</button>
     </div>
     <div class="view-group" role="group" aria-label="View mode">
-      <button class="toggle-btn active" data-view="grid">grid</button>
-      <button class="toggle-btn" data-view="chart">chart</button>
+      <button class="toggle-btn active" data-view="grid" aria-pressed="true">grid</button>
+      <button class="toggle-btn" data-view="chart" aria-pressed="false">chart</button>
     </div>
   </div>
 
   <hr class="rule" />
 
   <!-- Top Artists -->
-  <section id="section-artists">
-    <span class="label">Top artists</span>
+  <section id="section-artists" aria-labelledby="label-artists">
+    <h2 class="label" id="label-artists">Top artists</h2>
     <div class="grid" id="artists-grid">
       {artists.length > 0 ? artists.map((a, i) => {
         const data = artistImages[a.name];
@@ -85,8 +85,8 @@ Astro.response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=300, s
   <hr class="rule" />
 
   <!-- Top Albums -->
-  <section id="section-albums">
-    <span class="label">Top albums</span>
+  <section id="section-albums" aria-labelledby="label-albums">
+    <h2 class="label" id="label-albums">Top albums</h2>
     <div class="grid" id="albums-grid">
       {albums.length > 0 ? albums.map((a, i) => {
         const imgEl = a.imageUrl
@@ -100,8 +100,8 @@ Astro.response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=300, s
   <hr class="rule" />
 
   <!-- Top Tracks -->
-  <section id="section-top-tracks">
-    <span class="label">Top tracks</span>
+  <section id="section-top-tracks" aria-labelledby="label-top-tracks">
+    <h2 class="label" id="label-top-tracks">Top tracks</h2>
     <div class="track-list" id="top-tracks-list">
       {topTracks.length > 0 ? topTracks.map((t, i) => (
         <div class="entry entry--ranked" set:html={`<span class="entry-rank" aria-hidden="true">${String(i + 1).padStart(2, '0')}</span><span class="entry-title"><a href="${esc(t.url)}" target="_blank" rel="noopener noreferrer" class="link">${esc(t.name)}</a><span class="entry-sub"> · ${esc(t.artist)}</span></span><span class="entry-meta">${formatPlaycount(t.playcount)}</span>`} />
@@ -112,13 +112,13 @@ Astro.response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=300, s
   <hr class="rule" />
 
   <!-- Recent Tracks -->
-  <section id="section-tracks">
-    <span class="label">Recent tracks</span>
+  <section id="section-tracks" aria-labelledby="label-tracks">
+    <h2 class="label" id="label-tracks">Recent tracks</h2>
     <div class="track-list" id="track-list">
       {recentTracks.length > 0 ? recentTracks.map((t) => {
         const isNow = t.timestamp === null;
         const metaEl = isNow
-          ? `<span class="track-live-wave" aria-label="Now playing"><span class="track-live-bar"></span><span class="track-live-bar"></span><span class="track-live-bar"></span><span class="track-live-bar"></span></span>`
+          ? `<span class="track-live-wave" role="img" aria-label="Now playing"><span class="track-live-bar" aria-hidden="true"></span><span class="track-live-bar" aria-hidden="true"></span><span class="track-live-bar" aria-hidden="true"></span><span class="track-live-bar" aria-hidden="true"></span></span>`
           : `<span class="entry-meta">${formatTimestamp(t.timestamp)}</span>`;
         return <div class="entry" set:html={`<span class="entry-title"><a href="${esc(t.url)}" target="_blank" rel="noopener noreferrer" class="link">${esc(t.name)}</a><span class="entry-sub"> · ${esc(t.artist)}</span></span>${metaEl}`} />;
       }) : Array.from({ length: 10 }).map(() => <div class="entry skeleton-row" />)}
@@ -138,55 +138,16 @@ Astro.response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=300, s
   )}
 
 <script is:inline data-astro-rerun>
-  // Restore last rendered HTML synchronously — runs before the deferred module
-  // so cached content appears immediately on every navigation (no skeleton flash).
+  // Restore the active period toggle button state synchronously before the module loads.
   (function () {
     try {
       var period = localStorage.getItem('music_last_period') || '7day';
-
-      var artistsEl   = document.getElementById('artists-grid');
-      var albumsEl    = document.getElementById('albums-grid');
-      var topTracksEl = document.getElementById('top-tracks-list');
-      var tracksEl    = document.getElementById('track-list');
-
-      // SSR already rendered real content for 7day — don't overwrite with stale cache
-      var ssrRendered = artistsEl && !artistsEl.querySelector('.skeleton');
-
-      if (ssrRendered && period === '7day') {
-        // Perfect match: SSR content is correct, nothing to restore
-      } else if (ssrRendered && period !== '7day') {
-        // User's preferred period differs — restore their cached HTML if available
-        var artistsHtml   = localStorage.getItem('music_ui_artists_'   + period);
-        var albumsHtml    = localStorage.getItem('music_ui_albums_'    + period);
-        var topTracksHtml = localStorage.getItem('music_ui_toptracks_' + period);
-        if (artistsHtml && albumsEl && topTracksEl) {
-          artistsEl.innerHTML   = artistsHtml;
-          albumsEl.innerHTML    = albumsHtml || '';
-          topTracksEl.innerHTML = topTracksHtml || '';
-          document.querySelectorAll('[data-period]').forEach(function (b) {
-            b.classList.toggle('active', b.getAttribute('data-period') === period);
-          });
-        }
-        // If no cached HTML for their period, keep SSR 7day — module script will fetch
-      } else {
-        // SSR failed (skeletons) — restore from localStorage as usual
-        var artistsHtml   = localStorage.getItem('music_ui_artists_'   + period);
-        var albumsHtml    = localStorage.getItem('music_ui_albums_'    + period);
-        var topTracksHtml = localStorage.getItem('music_ui_toptracks_' + period);
-        if (artistsEl   && artistsHtml)   artistsEl.innerHTML   = artistsHtml;
-        if (albumsEl    && albumsHtml)     albumsEl.innerHTML    = albumsHtml;
-        if (topTracksEl && topTracksHtml)  topTracksEl.innerHTML = topTracksHtml;
-        if (period !== '7day') {
-          document.querySelectorAll('[data-period]').forEach(function (b) {
-            b.classList.toggle('active', b.getAttribute('data-period') === period);
-          });
-        }
-      }
-
-      // Recent tracks: only restore from cache if SSR didn't render them
-      var tracksHtml = localStorage.getItem('music_ui_tracks');
-      if (tracksEl && tracksHtml && tracksEl.querySelector('.skeleton-row')) {
-        tracksEl.innerHTML = tracksHtml;
+      if (period !== '7day') {
+        document.querySelectorAll('[data-period]').forEach(function (b) {
+          var isActive = b.getAttribute('data-period') === period;
+          b.classList.toggle('active', isActive);
+          b.setAttribute('aria-pressed', String(isActive));
+        });
       }
     } catch (_) { /* localStorage unavailable */ }
   })();
@@ -233,14 +194,18 @@ Astro.response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=300, s
   }
 
   // ── Render helpers ────────────────────────────────────────────────────────
-  function renderArtists(artists: ArtistStat[], images: Map<string, ArtistData>, animate = true) {
+  async function fadeSwap(el: HTMLElement, html: string): Promise<void> {
+    el.innerHTML = html;
+  }
+
+  async function renderArtists(artists: ArtistStat[], images: Map<string, ArtistData>, animate = true) {
     const grid = document.getElementById('artists-grid')!;
     grid.classList.remove('chart-view');
-    grid.innerHTML = artists.map((a, i) => {
+    const html = artists.map((a, i) => {
       const data = images.get(a.name);
       const animStyle = animate ? `animation-delay:${i * 50}ms` : `animation:none`;
       const imgEl = data?.imageUrl
-        ? `<img src="${esc(data.imageUrl)}" alt="${esc(a.name)}" loading="lazy" decoding="async" style="${animStyle}" />`
+        ? `<img src="${esc(data.imageUrl)}" alt="${esc(a.name)}" width="300" height="300" loading="lazy" decoding="async" style="${animStyle}" />`
         : `<div class="img-placeholder" aria-hidden="true" style="${animStyle}"></div>`;
       const href = data?.spotifyUrl ?? a.url;
       return `
@@ -254,15 +219,16 @@ Astro.response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=300, s
           </a>
         </div>`;
     }).join('');
+    await fadeSwap(grid, html);
   }
 
-  function renderAlbums(albums: AlbumStat[], animate = true) {
+  async function renderAlbums(albums: AlbumStat[], animate = true) {
     const grid = document.getElementById('albums-grid')!;
     grid.classList.remove('chart-view');
-    grid.innerHTML = albums.map((a, i) => {
+    const html = albums.map((a, i) => {
       const animStyle = animate ? `animation-delay:${i * 50}ms` : `animation:none`;
       const imgEl = a.imageUrl
-        ? `<img src="${esc(a.imageUrl)}" alt="${esc(a.name)}" loading="lazy" decoding="async" style="${animStyle}" />`
+        ? `<img src="${esc(a.imageUrl)}" alt="${esc(a.name)}" width="300" height="300" loading="lazy" decoding="async" style="${animStyle}" />`
         : `<div class="img-placeholder" aria-hidden="true" style="${animStyle}"></div>`;
       return `
         <div class="grid-item">
@@ -275,6 +241,7 @@ Astro.response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=300, s
           </a>
         </div>`;
     }).join('');
+    await fadeSwap(grid, html);
   }
 
   function animateBars(grid: HTMLElement) {
@@ -287,12 +254,12 @@ Astro.response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=300, s
     }));
   }
 
-  function renderArtistsChart(artists: ArtistStat[]) {
+  async function renderArtistsChart(artists: ArtistStat[]) {
     const grid = document.getElementById('artists-grid')!;
     grid.classList.add('chart-view');
     const max = artists[0]?.playcount ?? 1;
     const images = new Map(Object.entries(lastImages));
-    grid.innerHTML = `<div class="vchart">${artists.map((a) => {
+    const html = `<div class="vchart">${artists.map((a) => {
       const pct = (a.playcount / max) * 100;
       const data = images.get(a.name);
       const imgEl = data?.imageUrl
@@ -308,14 +275,15 @@ Astro.response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=300, s
           <span class="vchart-name" title="${esc(a.name)}">${esc(a.name)}</span>
         </div>`;
     }).join('')}</div>`;
+    await fadeSwap(grid, html);
     animateBars(grid);
   }
 
-  function renderAlbumsChart(albums: AlbumStat[]) {
+  async function renderAlbumsChart(albums: AlbumStat[]) {
     const grid = document.getElementById('albums-grid')!;
     grid.classList.add('chart-view');
     const max = albums[0]?.playcount ?? 1;
-    grid.innerHTML = `<div class="vchart">${albums.map((a) => {
+    const html = `<div class="vchart">${albums.map((a) => {
       const pct = (a.playcount / max) * 100;
       const imgEl = a.imageUrl
         ? `<img src="${esc(a.imageUrl)}" alt="" width="44" height="44" loading="lazy" />`
@@ -330,17 +298,18 @@ Astro.response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=300, s
           <span class="vchart-name" title="${esc(a.name)}">${esc(a.name)}</span>
         </div>`;
     }).join('')}</div>`;
+    await fadeSwap(grid, html);
     animateBars(grid);
   }
 
-  function renderTracks(tracks: Track[]) {
+  async function renderTracks(tracks: Track[]) {
     const list = document.getElementById('track-list')!;
-    list.innerHTML = tracks.map((t) => {
+    const html = tracks.map((t) => {
       const isNow = t.timestamp === null;
       const metaEl = isNow
-        ? `<span class="track-live-wave" aria-label="Now playing">
-             <span class="track-live-bar"></span><span class="track-live-bar"></span>
-             <span class="track-live-bar"></span><span class="track-live-bar"></span>
+        ? `<span class="track-live-wave" role="img" aria-label="Now playing">
+             <span class="track-live-bar" aria-hidden="true"></span><span class="track-live-bar" aria-hidden="true"></span>
+             <span class="track-live-bar" aria-hidden="true"></span><span class="track-live-bar" aria-hidden="true"></span>
            </span>`
         : `<span class="entry-meta">${formatTimestamp(t.timestamp)}</span>`;
       return `
@@ -352,11 +321,12 @@ Astro.response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=300, s
           ${metaEl}
         </div>`;
     }).join('');
+    await fadeSwap(list, html);
   }
 
-  function renderTopTracks(tracks: TrackStat[]) {
+  async function renderTopTracks(tracks: TrackStat[]) {
     const list = document.getElementById('top-tracks-list')!;
-    list.innerHTML = tracks.map((t, i) => `
+    const html = tracks.map((t, i) => `
       <div class="entry entry--ranked">
         <span class="entry-rank" aria-hidden="true">${String(i + 1).padStart(2, '0')}</span>
         <span class="entry-title">
@@ -365,6 +335,7 @@ Astro.response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=300, s
         </span>
         <span class="entry-meta">${formatPlaycount(t.playcount)}</span>
       </div>`).join('');
+    await fadeSwap(list, html);
   }
 
   function showError(sectionId: string) {
@@ -374,31 +345,21 @@ Astro.response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=300, s
     if (content) content.innerHTML = '<p class="unavailable">unavailable</p>';
   }
 
-  // ── HTML cache — persist rendered markup for instant restores ─────────────
-  function saveGridHtml(type: 'artists' | 'albums', period: Period): void {
-    try {
-      const el = document.getElementById(`${type}-grid`);
-      if (el) localStorage.setItem(`music_ui_${type}_${period}`, el.innerHTML);
-    } catch { /* quota exceeded */ }
-  }
-
-  function saveTracksHtml(): void {
-    try {
-      const el = document.getElementById('track-list');
-      if (el) localStorage.setItem('music_ui_tracks', el.innerHTML);
-    } catch { /* quota exceeded */ }
-  }
-
-  function saveTopTracksHtml(period: Period): void {
-    try {
-      const el = document.getElementById('top-tracks-list');
-      if (el) localStorage.setItem(`music_ui_toptracks_${period}`, el.innerHTML);
-    } catch { /* quota exceeded */ }
+  function showSkeletons(): void {
+    const skeletonGrid = Array.from({ length: 10 }, () => '<div class="grid-item skeleton"></div>').join('');
+    const skeletonList = Array.from({ length: 10 }, () => '<div class="entry skeleton-row"></div>').join('');
+    const artistsGrid = document.getElementById('artists-grid');
+    const albumsGrid  = document.getElementById('albums-grid');
+    const topTracksList = document.getElementById('top-tracks-list');
+    if (artistsGrid) artistsGrid.innerHTML = skeletonGrid;
+    if (albumsGrid)  albumsGrid.innerHTML  = skeletonGrid;
+    if (topTracksList) topTracksList.innerHTML = skeletonList;
   }
 
   // ── State — reset by init() on every navigation ───────────────────────────
   let currentPeriod: Period = '7day';
   let viewMode: 'grid' | 'chart' = 'grid';
+  let prefetchController: AbortController | null = null;
 
   // Last successfully loaded data — used for instant re-render on view toggle
   let lastArtists:   ArtistStat[] = [];
@@ -416,22 +377,13 @@ Astro.response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=300, s
       lastAlbums    = cached.albums;
       lastTopTracks = cached.topTracks ?? [];
       if (viewMode === 'chart') {
-        renderArtistsChart(cached.artists);
-        renderAlbumsChart(cached.albums);
+        await renderArtistsChart(cached.artists);
+        await renderAlbumsChart(cached.albums);
       } else {
-        // Skip re-render if the inline script already restored cached HTML into the DOM
-        // (initial load only — period toggles always force a render).
-        const artistsGrid = document.getElementById('artists-grid');
-        const htmlAlreadyRestored = !forceRender && artistsGrid && !artistsGrid.querySelector('.skeleton');
-        if (!htmlAlreadyRestored) {
-          renderArtists(cached.artists, new Map(Object.entries(cached.images)), !forceRender);
-          saveGridHtml('artists', period);
-          renderAlbums(cached.albums, !forceRender);
-          saveGridHtml('albums', period);
-        }
+        await renderArtists(cached.artists, new Map(Object.entries(cached.images)), !forceRender);
+        await renderAlbums(cached.albums, !forceRender);
         if (cached.topTracks) {
-          renderTopTracks(cached.topTracks);
-          saveTopTracksHtml(period);
+          await renderTopTracks(cached.topTracks);
         }
       }
       return;
@@ -447,10 +399,9 @@ Astro.response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=300, s
     if (albumsResult.status === 'fulfilled') {
       lastAlbums = albumsResult.value;
       if (viewMode === 'chart') {
-        renderAlbumsChart(albumsResult.value);
+        await renderAlbumsChart(albumsResult.value);
       } else {
-        renderAlbums(albumsResult.value, !forceRender);
-        saveGridHtml('albums', period);
+        await renderAlbums(albumsResult.value, !forceRender);
       }
     } else {
       showError('section-albums');
@@ -458,8 +409,7 @@ Astro.response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=300, s
 
     if (topTracksResult.status === 'fulfilled') {
       lastTopTracks = topTracksResult.value;
-      renderTopTracks(topTracksResult.value);
-      saveTopTracksHtml(period);
+      await renderTopTracks(topTracksResult.value);
     } else {
       showError('section-top-tracks');
     }
@@ -483,10 +433,9 @@ Astro.response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=300, s
       lastImages  = images;
 
       if (viewMode === 'chart') {
-        renderArtistsChart(artists);
+        await renderArtistsChart(artists);
       } else {
-        renderArtists(artists, new Map(Object.entries(images)), !forceRender);
-        saveGridHtml('artists', period);
+        await renderArtists(artists, new Map(Object.entries(images)), !forceRender);
       }
 
       if (albumsResult.status === 'fulfilled' && topTracksResult.status === 'fulfilled') {
@@ -497,19 +446,57 @@ Astro.response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=300, s
     }
   }
 
+  // ── Background prefetch — warms cache for all other periods after idle ───
+  async function prefetchRemainingPeriods(): Promise<void> {
+    prefetchController = new AbortController();
+    const signal = prefetchController.signal;
+    const allPeriods: Period[] = ['7day', '1month', '12month', 'overall'];
+    const periodsToFetch = allPeriods.filter((p) =>
+      p !== currentPeriod && !cacheGet<PeriodData>(`music_period_v4_${p}`, TTL.period)
+    );
+
+    for (const period of periodsToFetch) {
+      if (signal.aborted) return;
+      try {
+        const [artistsResult, albumsResult, topTracksResult] = await Promise.allSettled([
+          getTopArtists(period, 10, API_KEY, USERNAME),
+          getTopAlbums(period, 10, API_KEY, USERNAME),
+          getTopTracks(period, 10, API_KEY, USERNAME),
+        ]);
+        if (signal.aborted) return;
+        if (artistsResult.status !== 'fulfilled' || albumsResult.status !== 'fulfilled' || topTracksResult.status !== 'fulfilled') continue;
+
+        const artists   = artistsResult.value;
+        const albums    = albumsResult.value;
+        const topTracks = topTracksResult.value;
+
+        let images: Record<string, ArtistData> = {};
+        if (artists.length > 0) {
+          try {
+            const params = new URLSearchParams(artists.map((a) => ['names', a.name]));
+            const res = await fetch(`/api/artist-images?${params}`, { signal });
+            if (res.ok) images = await res.json() as Record<string, ArtistData>;
+          } catch { /* images non-critical */ }
+        }
+        if (signal.aborted) return;
+
+        cacheSet<PeriodData>(`music_period_v4_${period}`, { artists, albums, images, topTracks });
+      } catch { /* ignore prefetch errors */ }
+    }
+  }
+
   async function loadStaticData() {
     const cachedTracks = cacheGet<Track[]>('music_tracks', TTL.tracks);
     if (cachedTracks) {
       const trackList = document.getElementById('track-list');
       if (trackList && trackList.querySelector('.skeleton-row')) {
-        renderTracks(cachedTracks);
-        saveTracksHtml();
+        await renderTracks(cachedTracks);
       }
       return;
     }
 
     await getRecentTracks(10, API_KEY, USERNAME)
-      .then((tracks) => { renderTracks(tracks); saveTracksHtml(); cacheSet('music_tracks', tracks); })
+      .then(async (tracks) => { await renderTracks(tracks); cacheSet('music_tracks', tracks); })
       .catch(() => showError('section-tracks'));
   }
 
@@ -537,31 +524,40 @@ Astro.response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=300, s
         currentPeriod = period;
         try { localStorage.setItem('music_last_period', period); } catch { /* ignore */ }
 
-        document.querySelectorAll('[data-period]').forEach((b) => b.classList.remove('active'));
+        document.querySelectorAll('[data-period]').forEach((b) => {
+          b.classList.remove('active');
+          b.setAttribute('aria-pressed', 'false');
+        });
         btn.classList.add('active');
+        btn.setAttribute('aria-pressed', 'true');
 
+        if (!cacheGet<PeriodData>(`music_period_v4_${period}`, TTL.period)) {
+          showSkeletons();
+        }
         await loadPeriodData(period, true);
       });
     });
 
     // ── View toggle ────────────────────────────────────────────────────────
     document.querySelectorAll<HTMLButtonElement>('[data-view]').forEach((btn) => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', async () => {
         const mode = btn.dataset.view as 'grid' | 'chart';
         if (mode === viewMode) return;
         viewMode = mode;
 
-        document.querySelectorAll('[data-view]').forEach((b) => b.classList.remove('active'));
+        document.querySelectorAll('[data-view]').forEach((b) => {
+          b.classList.remove('active');
+          b.setAttribute('aria-pressed', 'false');
+        });
         btn.classList.add('active');
+        btn.setAttribute('aria-pressed', 'true');
 
         if (viewMode === 'chart') {
-          renderArtistsChart(lastArtists);
-          renderAlbumsChart(lastAlbums);
+          await renderArtistsChart(lastArtists);
+          await renderAlbumsChart(lastAlbums);
         } else {
-          renderArtists(lastArtists, new Map(Object.entries(lastImages)));
-          saveGridHtml('artists', currentPeriod);
-          renderAlbums(lastAlbums);
-          saveGridHtml('albums', currentPeriod);
+          await renderArtists(lastArtists, new Map(Object.entries(lastImages)));
+          await renderAlbums(lastAlbums);
         }
       });
     });
@@ -595,15 +591,11 @@ Astro.response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=300, s
       lastArtists   = ssrData.artists;
       lastAlbums    = ssrData.albums;
       lastTopTracks = ssrData.topTracks;
-      saveGridHtml('albums', currentPeriod);
-      saveTopTracksHtml(currentPeriod);
-      saveTracksHtml();
 
       const ssrImages = ssrData.artistImages ?? {};
       if (Object.keys(ssrImages).length > 0) {
         // SSR resolved images — seed cache immediately, no client fetch needed
         lastImages = ssrImages;
-        saveGridHtml('artists', currentPeriod);
         cacheSet<PeriodData>(`music_period_v4_${currentPeriod}`, {
           artists: lastArtists, albums: lastAlbums,
           images: ssrImages, topTracks: lastTopTracks,
@@ -614,23 +606,21 @@ Astro.response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=300, s
         const params = new URLSearchParams(ssrData.artists.map((a) => ['names', a.name]));
         fetch(`/api/artist-images?${params}`)
           .then((r) => r.ok ? r.json() as Promise<Record<string, ArtistData>> : Promise.resolve({} as Record<string, ArtistData>))
-          .then((images) => {
+          .then(async (images) => {
             lastImages = images;
             if (viewMode === 'grid') {
-              renderArtists(lastArtists, new Map(Object.entries(images)));
+              await renderArtists(lastArtists, new Map(Object.entries(images)));
             } else {
-              renderArtistsChart(lastArtists);
+              await renderArtistsChart(lastArtists);
             }
-            saveGridHtml('artists', currentPeriod);
             cacheSet<PeriodData>(`music_period_v4_${currentPeriod}`, {
               artists: lastArtists, albums: lastAlbums,
               images, topTracks: lastTopTracks,
             });
           })
-          .catch(() => { saveGridHtml('artists', currentPeriod); });
+          .catch(() => { /* ignore */ });
       } else {
         lastImages = {};
-        saveGridHtml('artists', currentPeriod);
       }
     } else {
       // Period mismatch or SSR failed — fetch client-side as before
@@ -639,21 +629,48 @@ Astro.response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=300, s
         loadStaticData(),
       ]);
     }
+
+    // Warm the cache for remaining periods during browser idle time
+    const scheduleIdle = (window as Window & { requestIdleCallback?: (cb: () => void) => void }).requestIdleCallback
+      ?? ((cb: () => void) => setTimeout(cb, 200));
+    scheduleIdle(() => prefetchRemainingPeriods());
   }
 
   // astro:page-load fires on first load AND after every View Transition.
   // View Transitions replace DOM elements, so init() must re-bind event handlers
   // to the fresh elements on each navigation.
   document.addEventListener('astro:page-load', init);
+
+  // Abort any in-flight prefetch when navigating away via View Transition
+  document.addEventListener('astro:before-swap', () => {
+    if (prefetchController) {
+      prefetchController.abort();
+      prefetchController = null;
+    }
+  });
 </script>
 
 <style>
+  /* ── Page entrance ─────────────────────────────────────────── */
+  /* Use opacity-only fade (no translate) — the translate on surrounding elements
+     creates a perceptual illusion that the image grid is drifting upward. */
+  .controls-spacer,
+  .toggle {
+    animation: enter-fade 560ms ease-out 80ms both;
+  }
+
   .page-header {
     margin-bottom: 0;
     display: flex;
     align-items: baseline;
     justify-content: space-between;
     gap: 1rem;
+    animation: enter-fade 560ms ease-out both;
+  }
+
+  @keyframes enter-fade {
+    from { opacity: 0; }
+    to   { opacity: 1; }
   }
 
   .lfm-link {
@@ -706,13 +723,13 @@ Astro.response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=300, s
     border: none;
     cursor: pointer;
     padding: 0;
-    transition: color 250ms, padding-left 500ms cubic-bezier(0.16, 1, 0.3, 1);
+    transition: color 250ms, transform 500ms cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   .toggle-btn:hover,
   .toggle-btn.active {
     color: var(--fg);
-    padding-left: 0.4rem;
+    transform: translateX(0.4rem);
   }
 
   /* Grid (artists + albums) */
@@ -761,8 +778,8 @@ Astro.response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=300, s
   }
 
   @keyframes img-pop-in {
-    from { opacity: 0; transform: scale(1.06); }
-    to   { opacity: 1; transform: scale(1); }
+    from { opacity: 0; }
+    to   { opacity: 1; }
   }
 
   :global(.item-overlay) {
@@ -825,6 +842,10 @@ Astro.response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=300, s
   }
 
   @media (prefers-reduced-motion: reduce) {
+    .page-header,
+    .controls-spacer,
+    .toggle { animation: none; }
+
     :global(.grid-item.skeleton),
     .skeleton-row { animation: none; }
 
@@ -929,11 +950,11 @@ Astro.response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=300, s
     }
   }
 
-  /* View toggle buttons — suppress the padding-left indent that period buttons use.
+  /* View toggle buttons — suppress the translateX indent that period buttons use.
      Without this, clicking "chart" would shift it rightward inside the right-side flex group. */
   [data-view].toggle-btn:hover,
   [data-view].toggle-btn.active {
-    padding-left: 0;
+    transform: none;
   }
 
   /* ── Mobile layout ──────────────────────────────────────────────────────── */
@@ -985,11 +1006,11 @@ Astro.response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=300, s
 
   /* ── Track row hover indent — mirrors toggle-btn / elsewhere-link pattern ─ */
   :global(.track-list .entry) {
-    transition: padding-left 500ms cubic-bezier(0.16, 1, 0.3, 1);
+    transition: transform 500ms cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   :global(.track-list .entry:hover) {
-    padding-left: 0.35rem;
+    transform: translateX(0.35rem);
   }
 
   /* ── Now-playing soundwave in recent tracks ─────────────────────────────── */
@@ -1005,7 +1026,7 @@ Astro.response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=300, s
     width: 2px;
     border-radius: 1px;
     background: var(--muted);
-    height: 3px;
+    height: 14px;
     transform-origin: bottom;
     animation: track-soundwave 1.4s ease-in-out infinite;
   }
@@ -1016,12 +1037,12 @@ Astro.response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=300, s
   :global(.track-live-bar:nth-child(4)) { animation-duration: 1.0s; animation-delay: -0.5s; }
 
   @keyframes track-soundwave {
-    0%   { height: 3px;  }
-    20%  { height: 14px; }
-    40%  { height: 5px;  }
-    60%  { height: 11px; }
-    80%  { height: 4px;  }
-    100% { height: 3px;  }
+    0%   { transform: scaleY(0.214); }
+    20%  { transform: scaleY(1);     }
+    40%  { transform: scaleY(0.357); }
+    60%  { transform: scaleY(0.786); }
+    80%  { transform: scaleY(0.286); }
+    100% { transform: scaleY(0.214); }
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -1029,11 +1050,11 @@ Astro.response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=300, s
       transition: none;
     }
     :global(.track-list .entry:hover) {
-      padding-left: 0;
+      transform: none;
     }
     :global(.track-live-bar) {
       animation: none;
-      height: 10px;
+      transform: scaleY(0.714);
     }
   }
 </style>

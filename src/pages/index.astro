@@ -3,13 +3,13 @@ import Layout from '../layouts/Layout.astro';
 import NowPlaying from '../components/NowPlaying.astro';
 ---
 
-<Layout title="Stanley Pang — Software Engineer">
+<Layout title="Software Engineer" description="Stanley Pang — CS student at the University of Toronto, software engineer intern at Shopify. Building software that actually works.">
 <div class="home-layout">
   <!-- Hero -->
   <header class="hero">
     <div class="hero-text">
       <h1 class="display-name">Stanley Pang</h1>
-<p class="tagline">Software Engineer!</p>
+<p class="tagline">Software Engineer</p>
       <p class="bio">
         I like making software that actually works for people, and I like understanding
         exactly how it does that. Studying CS at the University of Toronto,
@@ -22,8 +22,8 @@ import NowPlaying from '../components/NowPlaying.astro';
   </header>
 
   <!-- Work -->
-  <section>
-    <span class="label">Work</span>
+  <section aria-labelledby="section-work">
+    <h2 class="label" id="section-work">Work</h2>
     <div class="role-list">
       <div class="work-item">
         <img src="/shopify-logo.svg" alt="Shopify" class="work-logo" width="36" height="36" loading="lazy" />
@@ -54,11 +54,11 @@ import NowPlaying from '../components/NowPlaying.astro';
 
 
   <!-- Education -->
-  <section>
-    <span class="label">Education</span>
+  <section aria-labelledby="section-education">
+    <h2 class="label" id="section-education">Education</h2>
     <div class="role-list">
       <div class="work-item">
-        <img src="/uoft-logo.svg" alt="University of Toronto" class="edu-logo" width="36" height="36" loading="lazy" />
+        <img src="/uoft-logo-72.webp" alt="University of Toronto" class="edu-logo" width="36" height="36" loading="lazy" />
         <div class="item-text">
           <span class="entry-title">University of Toronto</span>
           <p class="work-role">BSc Computer Science · Math &amp; Stats Minor</p>
@@ -70,29 +70,29 @@ import NowPlaying from '../components/NowPlaying.astro';
 
 
   <!-- Listening -->
-  <section>
-    <span class="label" id="listening-label">Listening</span>
+  <section aria-labelledby="listening-label">
+    <h2 class="label" id="listening-label">Listening</h2>
     <NowPlaying />
   </section>
 
   <!-- Elsewhere -->
-  <section>
-    <span class="label">Elsewhere</span>
+  <section aria-labelledby="section-elsewhere">
+    <h2 class="label" id="section-elsewhere">Elsewhere</h2>
     <ul class="elsewhere-list">
       <li>
-        <a href="https://github.com/stanleypangg" target="_blank" rel="noopener noreferrer">
+        <a href="https://github.com/stanleypangg" target="_blank" rel="me noopener noreferrer">
           <svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
           GitHub
         </a>
       </li>
       <li>
-        <a href="https://www.linkedin.com/in/stanleypangg/" target="_blank" rel="noopener noreferrer">
+        <a href="https://www.linkedin.com/in/stanleypangg/" target="_blank" rel="me noopener noreferrer">
           <svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
           LinkedIn
         </a>
       </li>
       <li>
-        <a href="https://x.com/stanleypangg" target="_blank" rel="noopener noreferrer">
+        <a href="https://x.com/stanleypangg" target="_blank" rel="me noopener noreferrer">
           <svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"/></svg>
           Twitter/X
         </a>
@@ -112,6 +112,24 @@ import NowPlaying from '../components/NowPlaying.astro';
     </ul>
   </section>
 </div>
+
+<script type="application/ld+json" set:html={JSON.stringify({
+  "@context": "https://schema.org",
+  "@type": "Person",
+  "name": "Stanley Pang",
+  "url": "https://stanleyp.dev",
+  "jobTitle": "Software Engineer",
+  "description": "CS student at the University of Toronto, software engineer intern at Shopify.",
+  "alumniOf": {
+    "@type": "EducationalOrganization",
+    "name": "University of Toronto"
+  },
+  "sameAs": [
+    "https://github.com/stanleypangg",
+    "https://www.linkedin.com/in/stanleypangg/",
+    "https://x.com/stanleypangg"
+  ]
+})} />
 </Layout>
 
 <style>
@@ -139,6 +157,7 @@ import NowPlaying from '../components/NowPlaying.astro';
     width: clamp(110px, 18vw, 160px);
     flex-shrink: 0;
     border-radius: 2px;
+    overflow: hidden;
   }
 
   .hero-photo img {
@@ -264,17 +283,19 @@ import NowPlaying from '../components/NowPlaying.astro';
 
   /* ── Mobile ────────────────────────────────────────────────── */
   @media (max-width: 600px) {
-    /* Keep side-by-side but shrink photo and pin it to the top of the text */
+    /* Keep side-by-side; constrain photo with fluid sizing */
     .hero {
       align-items: flex-start;
     }
 
     .hero-photo {
-      width: 80px;
+      width: clamp(104px, 27vw, 128px);
       flex-shrink: 0;
+      overflow: hidden;
     }
 
     .hero-photo img {
+      width: 100%;
       height: auto;
       aspect-ratio: 3 / 4;
       object-fit: cover;
@@ -301,42 +322,21 @@ import NowPlaying from '../components/NowPlaying.astro';
   }
 
   /* ── Page entrance ─────────────────────────────────────────── */
-  @keyframes enter-up {
-    from { opacity: 0; translate: 0 10px; }
-    to   { opacity: 1; translate: 0 0;   }
-  }
-
   .hero {
     animation: enter-up 560ms cubic-bezier(0.16, 1, 0.3, 1) both;
   }
 
   section:nth-of-type(1) {
-    animation: enter-up 560ms cubic-bezier(0.16, 1, 0.3, 1) 90ms both;
+    animation: enter-up 560ms cubic-bezier(0.16, 1, 0.3, 1) 80ms both;
   }
   section:nth-of-type(2) {
-    animation: enter-up 560ms cubic-bezier(0.16, 1, 0.3, 1) 170ms both;
+    animation: enter-up 560ms cubic-bezier(0.16, 1, 0.3, 1) 150ms both;
   }
   section:nth-of-type(3) {
-    animation: enter-up 560ms cubic-bezier(0.16, 1, 0.3, 1) 250ms both;
+    animation: enter-up 560ms cubic-bezier(0.16, 1, 0.3, 1) 220ms both;
   }
   section:nth-of-type(4) {
-    animation: enter-up 560ms cubic-bezier(0.16, 1, 0.3, 1) 330ms both;
-  }
-
-  /* ── Label letter-spacing expand ───────────────────────────── */
-  /* Runs alongside the section entrance — tracking breathes open
-     as each section arrives. Delays mirror section enter-up delays. */
-  section:nth-of-type(1) :global(.label) {
-    animation: expand-tracking 700ms cubic-bezier(0.16, 1, 0.3, 1) 90ms both;
-  }
-  section:nth-of-type(2) :global(.label) {
-    animation: expand-tracking 700ms cubic-bezier(0.16, 1, 0.3, 1) 170ms both;
-  }
-  section:nth-of-type(3) :global(.label) {
-    animation: expand-tracking 700ms cubic-bezier(0.16, 1, 0.3, 1) 250ms both;
-  }
-  section:nth-of-type(4) :global(.label) {
-    animation: expand-tracking 700ms cubic-bezier(0.16, 1, 0.3, 1) 330ms both;
+    animation: enter-up 560ms cubic-bezier(0.16, 1, 0.3, 1) 290ms both;
   }
 
   .elsewhere-list {
@@ -378,9 +378,6 @@ import NowPlaying from '../components/NowPlaying.astro';
     }
     .display-name:hover {
       font-variation-settings: 'opsz' 80, 'wght' 400;
-    }
-    section :global(.label) {
-      animation: none;
     }
   }
 </style>

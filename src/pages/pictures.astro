@@ -51,12 +51,10 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
 }
 ---
 
-<Layout title="Pictures — Stanley Pang" description="Photos by Stanley Pang.">
+<Layout title="Pictures" description="Photos by Stanley Pang.">
   <header class="page-header">
     <h1 class="page-title">Pictures</h1>
   </header>
-
-  <div style="margin-top: 1.5rem;"></div>
 
   {photos.length === 0 ? (
     <p class="empty">Nothing here yet.</p>
@@ -76,6 +74,7 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
               loading={i < 6 ? 'eager' : 'lazy'}
               decoding={i < 6 ? 'auto' : 'async'}
               fetchpriority={i < 6 ? 'high' : 'auto'}
+              draggable="false"
             />
           </div>
         </li>
@@ -100,7 +99,7 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
       </div>
       <div class="lightbox-controls">
         <button class="lightbox-btn lightbox-prev" aria-label="Previous photo">&larr;</button>
-        <span class="lightbox-counter"></span>
+        <span class="lightbox-counter" role="status" aria-live="polite"></span>
         <button class="lightbox-btn lightbox-next" aria-label="Next photo">&rarr;</button>
       </div>
     </div>
@@ -108,11 +107,13 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
 </Layout>
 
 <style>
+  /* ── Page entrance ─────────────────────────────────────────── */
   .page-header {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
     gap: 1rem;
+    animation: enter-up 560ms cubic-bezier(0.16, 1, 0.3, 1) both;
   }
 
   .page-title {
@@ -128,6 +129,11 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
     color: var(--muted);
   }
 
+  .photo-grid,
+  .empty {
+    margin-top: 1.5rem;
+  }
+
   .photo-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
@@ -135,16 +141,21 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
     column-gap: 0.5rem;
     row-gap: 0;
     list-style: none;
+    cursor: grab;
+    /* expand grid box 8px in all directions for shadow room, then clip */
+    margin: -8px;
+    margin-top: calc(1.5rem - 8px); /* preserve visual top spacing from page header */
+    padding: 8px;
+    overflow: clip;
+  }
+
+  .photo-grid.is-dragging {
+    cursor: grabbing;
   }
 
   .photo-item {
     opacity: 0;
     transition: opacity 400ms cubic-bezier(0.16, 1, 0.3, 1);
-  }
-
-  /* Eager images snap in — no fade delay once grid is sized */
-  .photo-item.is-eager {
-    transition: none;
   }
 
   .photo-item.is-ready {
@@ -220,6 +231,12 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
     height: 100%;
     overflow: hidden;
     touch-action: none; /* prevent browser from hijacking horizontal swipes */
+
+    /* Lightbox UI tokens — always on the dark overlay, so these are fixed neutrals */
+    --lb-ui:       oklch(92% 0 0);  /* controls: close, prev, next */
+    --lb-ui-hover: oklch(100% 0 0); /* controls: hover */
+    --lb-dim:      oklch(80% 0 0);  /* counter */
+    --lb-caption:  oklch(75% 0 0);  /* caption text */
   }
 
   .lightbox::backdrop {
@@ -274,7 +291,7 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
     font-family: var(--font-text);
     font-size: 1.25rem;
     font-weight: 300;
-    color: oklch(92% 0 0);
+    color: var(--lb-ui);
     background: none;
     border: none;
     cursor: pointer;
@@ -288,7 +305,13 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
   }
 
   .lightbox-close:hover {
-    color: oklch(100% 0 0);
+    color: var(--lb-ui-hover);
+  }
+
+  .lightbox-close:focus-visible,
+  .lightbox-btn:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 2px;
   }
 
   .lightbox-meta {
@@ -307,7 +330,7 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
     font-family: var(--font-text);
     font-size: var(--text-xs);
     font-weight: 300;
-    color: oklch(75% 0 0);
+    color: var(--lb-caption);
   }
 
   .lightbox-caption:empty {
@@ -325,7 +348,7 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
     font-family: var(--font-text);
     font-size: var(--text-base);
     font-weight: 300;
-    color: oklch(92% 0 0);
+    color: var(--lb-ui);
     background: none;
     border: none;
     cursor: pointer;
@@ -339,14 +362,14 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
   }
 
   .lightbox-btn:hover {
-    color: oklch(100% 0 0);
+    color: var(--lb-ui-hover);
   }
 
   .lightbox-counter {
     font-family: var(--font-text);
     font-size: var(--text-2xs);
     font-weight: 300;
-    color: oklch(80% 0 0);
+    color: var(--lb-dim);
     font-variant-numeric: tabular-nums;
     letter-spacing: 0.06em;
     min-width: 5ch;
@@ -354,6 +377,13 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
   }
 
   @media (prefers-reduced-motion: reduce) {
+    .page-header {
+      animation: none;
+    }
+    .photo-item {
+      opacity: 1;
+      transition: none;
+    }
     .lightbox::backdrop {
       backdrop-filter: none;
       -webkit-backdrop-filter: none;
@@ -375,24 +405,34 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
 <script>
   const GAP = 8; // px between items vertically
 
-  function spanItem(item: HTMLElement) {
+  function measureHeight(item: HTMLElement): number {
+    // Read-only: returns the height without touching the DOM
     const img = item.querySelector<HTMLImageElement>('img');
-    if (!img) return;
+    if (!img) return 0;
     let h = img.getBoundingClientRect().height;
     if (h === 0) {
-      // Estimate height from declared aspect ratio before image loads
+      // Estimate from declared aspect ratio before image loads
       const aw = Number(img.getAttribute('width'));
       const ah = Number(img.getAttribute('height'));
       const w = img.getBoundingClientRect().width;
       if (aw && ah && w > 0) h = w * (ah / aw);
     }
+    return h;
+  }
+
+  function spanItem(item: HTMLElement) {
+    const h = measureHeight(item);
     if (h === 0) return;
     item.style.gridRowEnd = `span ${Math.ceil((h + GAP) / 4)}`;
-    item.classList.add('is-ready');
   }
 
   function spanAll() {
-    document.querySelectorAll<HTMLElement>('.photo-item').forEach(spanItem);
+    // Batch reads first, then writes — avoids layout thrashing
+    const items = Array.from(document.querySelectorAll<HTMLElement>('.photo-item'));
+    const heights = items.map(measureHeight);                          // all reads
+    items.forEach((item, i) => {                                       // all writes
+      if (heights[i] > 0) item.style.gridRowEnd = `span ${Math.ceil((heights[i] + GAP) / 4)}`;
+    });
   }
 
   // ── Lightbox state ────────────────────────────────────────────
@@ -400,6 +440,7 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
   let currentIndex = 0;
   let lightboxPhotos: Photo[] = [];
   let lbController: AbortController | null = null;
+  let savedFocus: HTMLElement | null = null;
 
   function getPhotos(): Photo[] {
     const el = document.getElementById('photo-data');
@@ -425,12 +466,16 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
     if (lightboxPhotos.length === 0) return;
     currentIndex = index;
     updateLightbox();
+    savedFocus = document.activeElement as HTMLElement | null;
     dialog.showModal();
+    dialog.querySelector<HTMLButtonElement>('.lightbox-close')?.focus();
   }
 
   function closeLightbox() {
     const dialog = document.getElementById('lightbox') as HTMLDialogElement | null;
     dialog?.close();
+    savedFocus?.focus();
+    savedFocus = null;
   }
 
   function navigate(delta: number) {
@@ -462,16 +507,25 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
   }
 
   function init() {
-    // Masonry grid sizing — span immediately using aspect-ratio attrs, re-span on load for accuracy
-    document.querySelectorAll<HTMLImageElement>('.photo-img').forEach(img => {
+    // Masonry grid sizing + staggered fade-in top-to-bottom
+    document.querySelectorAll<HTMLImageElement>('.photo-img').forEach((img, i) => {
       const item = img.closest('.photo-item') as HTMLElement;
+      // Span immediately from aspect-ratio attrs to keep layout stable before load
       spanItem(item);
-      if (!img.complete) img.addEventListener('load', () => spanItem(item));
-    });
 
-    // ── Lightbox ─────────────────────────────────────────────
-    const dialog = document.getElementById('lightbox') as HTMLDialogElement | null;
-    if (!dialog) return;
+      const reveal = () => {
+        spanItem(item); // re-span with actual loaded dimensions
+        // 60ms stagger per row (2 columns), capped at 300ms
+        item.style.transitionDelay = `${Math.min(Math.floor(i / 2) * 60, 300)}ms`;
+        item.classList.add('is-ready');
+      };
+
+      if (img.complete) {
+        reveal();
+      } else {
+        img.addEventListener('load', reveal, { once: true });
+      }
+    });
 
     // Abort previous listeners before re-attaching.
     // init() runs twice on first load (direct call + astro:page-load), which would
@@ -480,10 +534,99 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
     lbController = new AbortController();
     const { signal } = lbController;
 
+    // ── Drag-to-scroll on the photo grid ─────────────────────
+    const grid = document.querySelector<HTMLElement>('.photo-grid');
+    let gridDragActive = false;
+    let gridScrollEl: Element | null = null;
+    let gridStartX = 0;
+    let gridStartY = 0;
+    let gridScrollStartX = 0;
+    let gridScrollStartY = 0;
+    let gridLastX = 0;
+    let gridLastY = 0;
+    let gridVelX = 0;
+    let gridVelY = 0;
+    let gridWasDragging = false;
+    let gridRafId = 0;
+    const GRID_THRESHOLD = 5;
+
+    if (grid) {
+      grid.addEventListener('pointerdown', (e: PointerEvent) => {
+        if (e.button !== 0) return;
+        cancelAnimationFrame(gridRafId);
+        gridDragActive = false;
+        gridWasDragging = false;
+        gridStartX = e.clientX;
+        gridStartY = e.clientY;
+        gridLastX = e.clientX;
+        gridLastY = e.clientY;
+        gridVelX = 0;
+        gridVelY = 0;
+        // Scroll on the document root (the page itself)
+        gridScrollEl = document.scrollingElement || document.documentElement;
+        gridScrollStartX = gridScrollEl.scrollLeft;
+        gridScrollStartY = gridScrollEl.scrollTop;
+        grid.setPointerCapture(e.pointerId);
+      }, { signal });
+
+      grid.addEventListener('pointermove', (e: PointerEvent) => {
+        if (!gridScrollEl) return;
+        const dx = e.clientX - gridStartX;
+        const dy = e.clientY - gridStartY;
+        if (!gridDragActive) {
+          if (Math.hypot(dx, dy) < GRID_THRESHOLD) return;
+          gridDragActive = true;
+          grid.classList.add('is-dragging');
+        }
+        e.preventDefault();
+        gridVelX = gridLastX - e.clientX;
+        gridVelY = gridLastY - e.clientY;
+        gridLastX = e.clientX;
+        gridLastY = e.clientY;
+        gridScrollEl.scrollLeft = gridScrollStartX - dx;
+        gridScrollEl.scrollTop  = gridScrollStartY - dy;
+      }, { signal, passive: false });
+
+      const endGridDrag = (cancelled: boolean) => {
+        const wasActive = gridDragActive;
+        gridDragActive = false;
+        grid.classList.remove('is-dragging');
+
+        if (!wasActive || cancelled) { gridScrollEl = null; return; }
+
+        gridWasDragging = true;
+        requestAnimationFrame(() => { gridWasDragging = false; });
+
+        const el = gridScrollEl;
+        gridScrollEl = null;
+        let vx = gridVelX;
+        let vy = gridVelY;
+        const coast = () => {
+          if (!el || (Math.abs(vx) < 0.5 && Math.abs(vy) < 0.5)) return;
+          el.scrollLeft += vx;
+          el.scrollTop  += vy;
+          vx *= 0.92;
+          vy *= 0.92;
+          gridRafId = requestAnimationFrame(coast);
+        };
+        gridRafId = requestAnimationFrame(coast);
+      };
+
+      grid.addEventListener('pointerup', () => endGridDrag(false), { signal });
+      grid.addEventListener('pointercancel', () => endGridDrag(true), { signal });
+    }
+
+    // ── Lightbox ─────────────────────────────────────────────
+    const dialog = document.getElementById('lightbox') as HTMLDialogElement | null;
+    if (!dialog) return;
+
     document.querySelectorAll<HTMLElement>('.photo-item').forEach((item, i) => {
       const wrap = item.querySelector<HTMLElement>('.photo-wrap');
       if (!wrap) return;
-      wrap.addEventListener('click', () => openLightbox(i), { signal });
+      wrap.addEventListener('click', () => {
+        if (gridWasDragging) return;
+        openLightbox(i);
+      }, { signal });
       wrap.addEventListener('keydown', (e: KeyboardEvent) => {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openLightbox(i); }
       }, { signal });
