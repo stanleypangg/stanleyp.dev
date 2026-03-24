@@ -172,7 +172,7 @@ const isChat     = pathname.startsWith('/chat');
       <nav class="site-nav" aria-label="Site navigation">
         <div class="nav-inner">
           <a href="/" class="nav-home" aria-label="Home" aria-current={isHome ? 'page' : undefined}>
-            <img src="/logo.png" alt="" class="nav-logo" width="28" height="28" />
+            <img src="/logo.png" alt="" class="nav-logo" width="28" height="28" transition:persist="nav-logo" />
           </a>
           <ul class="nav-links">
             <li>
@@ -387,6 +387,23 @@ const isChat     = pathname.startsWith('/chat');
       mouse.x = -9999;
       mouse.y = -9999;
     });
+
+    function onTouchMove(e: TouchEvent) {
+      const t = e.touches[0];
+      mouse.x = t.clientX;
+      mouse.y = t.clientY;
+      startTick();
+    }
+
+    function onTouchEnd() {
+      mouse.x = -9999;
+      mouse.y = -9999;
+    }
+
+    document.addEventListener('touchstart', onTouchMove, { passive: true });
+    document.addEventListener('touchmove',  onTouchMove, { passive: true });
+    document.addEventListener('touchend',    onTouchEnd);
+    document.addEventListener('touchcancel', onTouchEnd);
   }
 
   // Bootstrap

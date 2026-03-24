@@ -199,6 +199,7 @@ img, video {
   flex-shrink: 0;
   filter: invert(1);
   transition: filter 300ms;
+  will-change: filter;
 }
 :root.dark .nav-logo {
   filter: none;
