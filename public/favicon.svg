@@ -1,14 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <style>
-    .bg   { fill: oklch(10.5% 0.003 260); }
-    .mark { fill: oklch(97%   0.005 80);  }
-    @media (prefers-color-scheme: light) {
-      .bg   { fill: oklch(97%   0.005 80);  }
-      .mark { fill: oklch(10.5% 0.003 260); }
-    }
-  </style>
-  <rect class="bg" width="32" height="32"/>
-  <g class="mark" transform="translate(0,32) scale(0.007273,-0.007407)" stroke="none">
+  <g fill="white" transform="translate(0,32) scale(0.007273,-0.007407)" stroke="none">
     <path d="M1610 4188 c-68 -19 -72 -39 -34 -158 13 -42 18 -101 21 -256 l5
 -200 -112 -52 c-120 -57 -260 -107 -328 -118 -27 -4 -58 -2 -82 6 -47 16 -90
 7 -90 -19 0 -10 25 -52 57 -92 169 -220 301 -329 399 -329 21 0 34 -5 34 -12
