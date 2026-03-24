@@ -17,7 +17,7 @@ import NowPlaying from '../components/NowPlaying.astro';
       </p>
     </div>
     <div class="hero-photo">
-      <img src="/headshot.webp" alt="Stanley Pang" loading="eager" fetchpriority="high" />
+      <img src="/headshot.webp" alt="Stanley Pang" width="320" height="335" loading="eager" fetchpriority="high" />
     </div>
   </header>
 
@@ -26,7 +26,7 @@ import NowPlaying from '../components/NowPlaying.astro';
     <span class="label">Work</span>
     <div class="role-list">
       <div class="work-item">
-        <img src="/shopify-logo.svg" alt="Shopify" class="work-logo" />
+        <img src="/shopify-logo.svg" alt="Shopify" class="work-logo" width="36" height="36" loading="lazy" />
         <div class="item-text">
           <span class="entry-title">Shopify</span>
           <p class="work-role">Software Engineer Intern</p>
@@ -34,7 +34,7 @@ import NowPlaying from '../components/NowPlaying.astro';
         <span class="entry-meta">Winter 2026</span>
       </div>
       <div class="work-item">
-        <img src="/boost-collective.jpg" alt="Boost Collective" class="work-logo work-logo--round" />
+        <img src="/boost-collective.jpg" alt="Boost Collective" class="work-logo work-logo--round" width="36" height="36" loading="lazy" decoding="async" />
         <div class="item-text">
           <span class="entry-title">Boost Collective</span>
           <p class="work-role">Software Engineer Intern</p>
@@ -42,7 +42,7 @@ import NowPlaying from '../components/NowPlaying.astro';
         <span class="entry-meta">Fall 2025</span>
       </div>
       <div class="work-item">
-        <img src="/spglobal-logo.jpg" alt="S&P Global" class="work-logo work-logo--round" />
+        <img src="/spglobal-logo.jpg" alt="S&amp;P Global" class="work-logo work-logo--round" width="36" height="36" loading="lazy" decoding="async" />
         <div class="item-text">
           <span class="entry-title">S&amp;P Global</span>
           <p class="work-role">Software Developer Intern</p>
@@ -58,7 +58,7 @@ import NowPlaying from '../components/NowPlaying.astro';
     <span class="label">Education</span>
     <div class="role-list">
       <div class="work-item">
-        <img src="/uoft-logo.svg" alt="University of Toronto" class="edu-logo" />
+        <img src="/uoft-logo.svg" alt="University of Toronto" class="edu-logo" width="36" height="36" loading="lazy" />
         <div class="item-text">
           <span class="entry-title">University of Toronto</span>
           <p class="work-role">BSc Computer Science · Math &amp; Stats Minor</p>
@@ -262,6 +262,31 @@ import NowPlaying from '../components/NowPlaying.astro';
     filter: saturate(1);
   }
 
+  /* ── Mobile ────────────────────────────────────────────────── */
+  @media (max-width: 600px) {
+    /* Keep side-by-side but shrink photo and pin it to the top of the text */
+    .hero {
+      align-items: flex-start;
+    }
+
+    .hero-photo {
+      width: 80px;
+      flex-shrink: 0;
+    }
+
+    .hero-photo img {
+      height: auto;
+      aspect-ratio: 3 / 4;
+      object-fit: cover;
+      object-position: top center;
+    }
+
+    /* Tighten the meta date so it doesn't crowd on narrow widths */
+    .entry-meta {
+      font-size: var(--text-2xs);
+    }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .work-item {
       transition: opacity 250ms;
@@ -390,6 +415,111 @@ import NowPlaying from '../components/NowPlaying.astro';
     });
   }
 
+  // Mouse-driven Y-axis spin on the hero photo.
+  // Horizontal mouse movement adds angular momentum — fast swipe = fast spin.
+  // Left/right movement = respective spin direction. Rotation is unbounded
+  // (full 360° like a coin/fan). When idle, friction decays the spin, then a
+  // critically damped spring snaps to the nearest face-forward position (0°/360°).
+  function initPhotoSpin() {
+    const photo = document.querySelector<HTMLElement>('.hero-photo');
+    if (!photo) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    let rotation     = 0;   // unbounded degrees (fed directly to rotateY)
+    let angVel       = 0;   // degrees/frame of angular momentum
+    let springVel    = 0;   // spring return velocity (degrees/frame)
+    let pendingDelta = 0;   // mouse X delta accumulated since last frame
+    let lastX: number | null = null;
+    let rafId: number | null = null;
+    let isMoving = false;
+    let moveTimer = 0;
+
+    const SENSITIVITY = 0.35; // angular velocity added per accumulated pixel
+    const MAX_VEL     = 14;   // degrees/frame cap (~840 deg/s, ~2.3 rps)
+    const FRICTION    = 0.965; // velocity multiplier per frame when coasting
+    const VEL_THRESH  = 0.25; // switch to spring-return below this angular speed
+    const K           = 120;  // spring stiffness
+    const C           = 22;   // critical damping (≈ 2·√120)
+    const DT          = 1 / 60;
+
+    function tick() {
+      // Inject accumulated mouse input as angular velocity
+      if (pendingDelta !== 0) {
+        angVel       = Math.max(-MAX_VEL, Math.min(MAX_VEL, angVel + pendingDelta * SENSITIVITY));
+        pendingDelta = 0;
+      }
+
+      const isReturning = !isMoving && Math.abs(angVel) < VEL_THRESH;
+
+      if (!isReturning) {
+        // SPINNING / COASTING: advance by angular velocity, apply friction when not driven
+        rotation += angVel;
+        if (!isMoving) angVel *= FRICTION;
+      } else {
+        // RETURNING: spring toward nearest face-forward angle (shortest path)
+        angVel = 0;
+        const mod    = ((rotation % 360) + 360) % 360;        // 0–359
+        const offset = mod <= 180 ? -mod : (360 - mod);       // shortest arc to 0° multiple
+        const target = rotation + offset;
+        const disp   = rotation - target;
+        const force  = -K * disp - C * springVel;
+        springVel   += force * DT;
+        rotation    += springVel * DT;
+
+        if (Math.abs(disp) < 0.05 && Math.abs(springVel) < 0.05) {
+          rotation               = target;
+          springVel              = 0;
+          photo.style.transform  = '';
+          photo.style.willChange = 'auto';
+          rafId = null;
+          return;
+        }
+      }
+
+      photo.style.transform = `perspective(600px) rotateY(${rotation.toFixed(3)}deg)`;
+      rafId = requestAnimationFrame(tick);
+    }
+
+    function ensureTicking() {
+      if (rafId === null) {
+        photo.style.willChange = 'transform';
+        rafId = requestAnimationFrame(tick);
+      }
+    }
+
+    function onMouseMove(e: MouseEvent) {
+      if (lastX !== null) pendingDelta += e.clientX - lastX;
+      lastX    = e.clientX;
+      isMoving = true;
+      clearTimeout(moveTimer);
+      moveTimer = window.setTimeout(() => { isMoving = false; }, 80);
+      ensureTicking();
+    }
+
+    function onMouseEnter(e: MouseEvent) { lastX = e.clientX; }
+    function onMouseLeave()              { lastX = null; isMoving = false; ensureTicking(); }
+
+    photo.addEventListener('mousemove',  onMouseMove);
+    photo.addEventListener('mouseenter', onMouseEnter);
+    photo.addEventListener('mouseleave', onMouseLeave);
+
+    return () => {
+      photo.removeEventListener('mousemove',  onMouseMove);
+      photo.removeEventListener('mouseenter', onMouseEnter);
+      photo.removeEventListener('mouseleave', onMouseLeave);
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      photo.style.transform  = '';
+      photo.style.willChange = 'auto';
+    };
+  }
+
   initNameHover();
-  document.addEventListener('astro:after-swap', initNameHover);
+
+  let spinCleanup = initPhotoSpin();
+
+  document.addEventListener('astro:after-swap', () => {
+    initNameHover();
+    spinCleanup?.();
+    spinCleanup = initPhotoSpin();
+  });
 </script>
