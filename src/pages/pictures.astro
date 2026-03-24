@@ -1,7 +1,12 @@
 ---
+export const prerender = false;
+
 import Layout from '../layouts/Layout.astro';
 import { mapResource, sortNewestFirst, type Photo } from '../lib/cloudinary';
 import photoOrder from '../data/photo-order.json';
+
+// Cache at Vercel's CDN edge: serve cached for 1h, revalidate in background for up to 24h
+Astro.response.headers.set('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
 
 const { CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET } = import.meta.env;
 
@@ -62,9 +67,14 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
           <div class="photo-wrap" role="button" tabindex="0" aria-label={photo.alt || `Photo ${i + 1}`}>
             <img
               src={photo.src}
+              srcset={photo.srcset}
+              sizes="(max-width: 760px) calc(50vw - 1.5rem), 344px"
+              width={photo.width}
+              height={photo.height}
               alt={photo.alt}
               class="photo-img"
               loading={i < 6 ? 'eager' : 'lazy'}
+              decoding={i < 6 ? 'auto' : 'async'}
               fetchpriority={i < 6 ? 'high' : 'auto'}
             />
           </div>
@@ -76,9 +86,15 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
   <script id="photo-data" type="application/json" set:html={JSON.stringify(photos)} />
 
   <dialog id="lightbox" class="lightbox" aria-label="Photo viewer">
+    <div class="lb-adj-wrap" id="lb-adj-prev" aria-hidden="true">
+      <img class="lb-adj-img" src="" alt="" draggable="false" />
+    </div>
+    <div class="lb-adj-wrap" id="lb-adj-next" aria-hidden="true">
+      <img class="lb-adj-img" src="" alt="" draggable="false" />
+    </div>
     <div class="lightbox-content">
       <button class="lightbox-close" aria-label="Close">&times;</button>
-      <img class="lightbox-img" src="" alt="" />
+      <img class="lightbox-img" src="" alt="" draggable="false" />
       <div class="lightbox-meta">
         <span class="lightbox-caption"></span>
       </div>
@@ -164,6 +180,26 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
     filter: saturate(1);
   }
 
+  /* ── Adjacent image overlays (shown during drag) ───────────── */
+
+  .lb-adj-wrap {
+    position: fixed;
+    inset: 0;
+    display: none; /* shown via JS */
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+  }
+
+  .lb-adj-img {
+    max-width: min(90vw, 1100px);
+    max-height: 70dvh;
+    object-fit: contain;
+    border-radius: 4px;
+    display: block;
+    user-select: none;
+  }
+
   /* ── Lightbox ─────────────────────────────────────────────── */
 
   .lightbox {
@@ -209,6 +245,8 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
     border-radius: 4px;
     filter: saturate(1);
     display: block;
+    cursor: grab;
+    user-select: none;
   }
 
   @keyframes lb-out-left {
@@ -338,9 +376,16 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
   const GAP = 8; // px between items vertically
 
   function spanItem(item: HTMLElement) {
-    const img = item.querySelector('img');
+    const img = item.querySelector<HTMLImageElement>('img');
     if (!img) return;
-    const h = img.getBoundingClientRect().height;
+    let h = img.getBoundingClientRect().height;
+    if (h === 0) {
+      // Estimate height from declared aspect ratio before image loads
+      const aw = Number(img.getAttribute('width'));
+      const ah = Number(img.getAttribute('height'));
+      const w = img.getBoundingClientRect().width;
+      if (aw && ah && w > 0) h = w * (ah / aw);
+    }
     if (h === 0) return;
     item.style.gridRowEnd = `span ${Math.ceil((h + GAP) / 4)}`;
     item.classList.add('is-ready');
@@ -417,10 +462,11 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
   }
 
   function init() {
-    // Masonry grid sizing
+    // Masonry grid sizing — span immediately using aspect-ratio attrs, re-span on load for accuracy
     document.querySelectorAll<HTMLImageElement>('.photo-img').forEach(img => {
-      if (img.complete) spanItem(img.closest('.photo-item') as HTMLElement);
-      else img.addEventListener('load', () => spanItem(img.closest('.photo-item') as HTMLElement));
+      const item = img.closest('.photo-item') as HTMLElement;
+      spanItem(item);
+      if (!img.complete) img.addEventListener('load', () => spanItem(item));
     });
 
     // ── Lightbox ─────────────────────────────────────────────
@@ -447,7 +493,11 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
     dialog.querySelector('.lightbox-next')?.addEventListener('click', () => navigate(1), { signal });
     dialog.querySelector('.lightbox-close')?.addEventListener('click', closeLightbox, { signal });
 
+    // Guard: suppress backdrop-close click if a drag just ended
+    let wasDragging = false;
+
     dialog.addEventListener('click', (e: MouseEvent) => {
+      if (wasDragging) return;
       if (e.target === dialog) closeLightbox();
     }, { signal });
 
@@ -456,22 +506,123 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
       if (e.key === 'ArrowRight') { e.preventDefault(); navigate(1); }
     }, { signal });
 
-    let touchStartX = 0;
-    let touchStartY = 0;
-    dialog.addEventListener('touchstart', (e: TouchEvent) => {
-      touchStartX = e.touches[0].clientX;
-      touchStartY = e.touches[0].clientY;
-    }, { passive: true, signal });
-    dialog.addEventListener('touchend', (e: TouchEvent) => {
-      const dx = e.changedTouches[0].clientX - touchStartX;
-      const dy = e.changedTouches[0].clientY - touchStartY;
-      if (Math.abs(dx) > 44 && Math.abs(dx) > Math.abs(dy) * 1.5) {
-        navigate(dx > 0 ? -1 : 1);
+    // ── Pointer-based drag / swipe (mouse + touch) ────────────────
+    // adj overlays sit at ±100vw, all three elements translate by the same dx
+    const adjPrevWrap = document.getElementById('lb-adj-prev') as HTMLElement | null;
+    const adjNextWrap = document.getElementById('lb-adj-next') as HTMLElement | null;
+
+    interface DragState {
+      startX: number; startY: number; delta: number; dragging: boolean;
+      sign: -1 | 1;   // -1 = going to prev, +1 = going to next
+      adjBase: number; // off-screen offset for the active adj (±vw)
+    }
+    let dragState: DragState | null = null;
+    let activeAdj: HTMLElement | null = null;
+    const DRAG_THRESHOLD = 80;
+
+    const hideAdj = () => {
+      if (!activeAdj) return;
+      activeAdj.style.cssText = '';
+      activeAdj = null;
+    };
+
+    dialog.addEventListener('pointerdown', (e: PointerEvent) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      dragState = { startX: e.clientX, startY: e.clientY, delta: 0, dragging: false, sign: 1, adjBase: 0 };
+    }, { signal });
+
+    dialog.addEventListener('pointermove', (e: PointerEvent) => {
+      if (!dragState) return;
+      const dx = e.clientX - dragState.startX;
+      const dy = e.clientY - dragState.startY;
+
+      if (!dragState.dragging) {
+        if (Math.abs(dx) < 8) return;
+        if (Math.abs(dy) > Math.abs(dx)) { dragState = null; return; }
+        dragState.dragging = true;
+        dialog.setPointerCapture(e.pointerId);
+        dialog.style.cursor = 'grabbing';
+
+        // Determine direction and prepare adjacent image
+        const sign: -1 | 1 = dx > 0 ? -1 : 1; // drag right = prev, drag left = next
+        dragState.sign = sign;
+        const adjBase = sign * window.innerWidth; // prev: -vw (left), next: +vw (right)
+        dragState.adjBase = adjBase;
+
+        const adjIndex = (currentIndex + sign + lightboxPhotos.length) % lightboxPhotos.length;
+        activeAdj = sign === -1 ? adjPrevWrap : adjNextWrap;
+        if (activeAdj) {
+          const adjImg = activeAdj.querySelector<HTMLImageElement>('.lb-adj-img');
+          if (adjImg) { adjImg.src = lightboxPhotos[adjIndex].src; adjImg.alt = lightboxPhotos[adjIndex].alt; }
+          activeAdj.style.display = 'flex';
+          activeAdj.style.transform = `translateX(${adjBase}px)`;
+        }
       }
-    }, { passive: true, signal });
-    dialog.addEventListener('touchcancel', () => {
-      touchStartX = 0;
-      touchStartY = 0;
+
+      dragState.delta = dx;
+      const img = dialog.querySelector<HTMLImageElement>('.lightbox-img');
+      if (img) { img.style.transition = 'none'; img.style.transform = `translateX(${dx}px)`; }
+      if (activeAdj) { activeAdj.style.transition = 'none'; activeAdj.style.transform = `translateX(${dragState.adjBase + dx}px)`; }
+    }, { signal });
+
+    const releaseDrag = () => {
+      if (!dragState) return;
+      const { dragging, delta, sign, adjBase } = dragState;
+      dragState = null;
+      dialog.style.cursor = '';
+      if (!dragging) { hideAdj(); return; }
+
+      wasDragging = true;
+      requestAnimationFrame(() => { wasDragging = false; });
+
+      const img = dialog.querySelector<HTMLImageElement>('.lightbox-img');
+      if (!img) { hideAdj(); return; }
+
+      const EASING = 'cubic-bezier(0.4, 0, 0.2, 1)';
+      const SNAP   = 'cubic-bezier(0.25, 1, 0.5, 1)';
+
+      if (Math.abs(delta) > DRAG_THRESHOLD && activeAdj) {
+        // Commit: slide current off, adj comes to center
+        const exitX = delta > 0 ? window.innerWidth : -window.innerWidth;
+        img.style.transition = `transform 200ms ${EASING}`;
+        img.style.transform = `translateX(${exitX}px)`;
+        activeAdj.style.transition = `transform 200ms ${EASING}`;
+        activeAdj.style.transform = `translateX(0px)`;
+
+        const adj = activeAdj;
+        img.addEventListener('transitionend', () => {
+          currentIndex = (currentIndex + sign + lightboxPhotos.length) % lightboxPhotos.length;
+          updateLightbox();
+          img.style.transition = 'none';
+          img.style.transform = '';
+          adj.style.cssText = '';
+          if (activeAdj === adj) activeAdj = null;
+        }, { once: true });
+      } else {
+        // Snap back: both return to starting positions
+        img.style.transition = `transform 280ms ${SNAP}`;
+        img.style.transform = '';
+        img.addEventListener('transitionend', () => { img.style.transition = ''; }, { once: true });
+
+        if (activeAdj) {
+          const adj = activeAdj;
+          adj.style.transition = `transform 280ms ${SNAP}`;
+          adj.style.transform = `translateX(${adjBase}px)`;
+          adj.addEventListener('transitionend', () => {
+            adj.style.cssText = '';
+            if (activeAdj === adj) activeAdj = null;
+          }, { once: true });
+        }
+      }
+    };
+
+    dialog.addEventListener('pointerup', releaseDrag, { signal });
+    dialog.addEventListener('pointercancel', () => {
+      dragState = null;
+      dialog.style.cursor = '';
+      const img = dialog.querySelector<HTMLImageElement>('.lightbox-img');
+      if (img) { img.style.transition = 'none'; img.style.transform = ''; }
+      hideAdj();
     }, { signal });
   }
 
