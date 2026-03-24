@@ -2,6 +2,7 @@
 import { ClientRouter } from 'astro:transitions';
 import ThemeToggle from '../components/ThemeToggle.astro';
 import WaveViz from '../components/WaveViz.astro';
+import CursorEffect from '../components/CursorEffect.astro';
 import '../styles/global.css';
 
 interface Props {
@@ -36,6 +37,12 @@ const isChat     = pathname.startsWith('/chat');
     <!-- Google Fonts: Fraunces (display) + DM Sans (body) -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+    <!-- Music page: preconnect to image CDNs so DNS+TLS is ready when images load -->
+    {isMusic && <>
+      <link rel="preconnect" href="https://i.scdn.co" crossorigin />
+      <link rel="preconnect" href="https://lastfm.freetls.fastly.net" crossorigin />
+    </>}
     <link
       href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=DM+Sans:opsz,wght@9..40,300..400&display=swap"
       rel="stylesheet"
@@ -49,6 +56,56 @@ const isChat     = pathname.startsWith('/chat');
         if (stored === 'dark' || (!stored && prefersDark)) {
           document.documentElement.classList.add('dark');
         }
+      })();
+    </script>
+
+    <!--
+      Override the native View Transitions API before ClientRouter loads.
+      The ::view-transition top layer renders above EVERYTHING — including
+      z-index and the CSS top layer — so there is no CSS trick to keep the
+      custom cursor visible and free during a native VT. Instead we replace
+      startViewTransition with a manual <main> fade that never hides the cursor.
+    -->
+    <script is:inline>
+      (function () {
+        if (!('startViewTransition' in document)) return;
+
+        var OUT = 160;
+        var IN  = 320;
+        var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+        document.startViewTransition = function (callback) {
+          var oldMain = document.querySelector('main');
+
+          if (!reduce && oldMain) {
+            oldMain.style.transition = 'opacity ' + OUT + 'ms ease-in';
+            oldMain.style.opacity = '0';
+          }
+
+          // updateCallbackDone: resolves after DOM swap (Astro uses this for ready)
+          var updateCallbackDone = (reduce
+            ? Promise.resolve().then(callback)
+            : new Promise(function (res) { setTimeout(res, OUT); }).then(callback)
+          );
+
+          // finished: resolves after enter animation completes
+          var finished = updateCallbackDone.then(function () {
+            var newMain = document.querySelector('main');
+            if (!reduce && newMain) {
+              newMain.style.opacity = '0';
+              newMain.style.transition = 'none';
+              void newMain.offsetHeight;
+              newMain.style.transition = 'opacity ' + IN + 'ms cubic-bezier(0.16,1,0.3,1)';
+              newMain.style.opacity = '1';
+              return new Promise(function (res) { setTimeout(res, IN); }).then(function () {
+                newMain.style.transition = '';
+                newMain.style.opacity = '';
+              });
+            }
+          });
+
+          return { ready: updateCallbackDone, finished: finished, updateCallbackDone: updateCallbackDone };
+        };
       })();
     </script>
 
@@ -71,6 +128,7 @@ const isChat     = pathname.startsWith('/chat');
   </head>
 
   <body>
+    <CursorEffect />
     <canvas id="bg-dots" aria-hidden="true"></canvas>
     <div class="wrap">
       <nav class="site-nav">
@@ -97,6 +155,7 @@ const isChat     = pathname.startsWith('/chat');
               <a
                 href="/music"
                 class="nav-link"
+                data-astro-prefetch="hover"
                 aria-current={isMusic ? 'page' : undefined}
               >music</a>
             </li>
@@ -104,6 +163,7 @@ const isChat     = pathname.startsWith('/chat');
               <a
                 href="/pictures"
                 class="nav-link"
+                data-astro-prefetch="hover"
                 aria-current={isPictures ? 'page' : undefined}
               >pictures</a>
             </li>
@@ -111,6 +171,7 @@ const isChat     = pathname.startsWith('/chat');
               <a
                 href="/chat"
                 class="nav-link"
+                data-astro-prefetch="hover"
                 aria-current={isChat ? 'page' : undefined}
               >chat</a>
             </li>
@@ -140,8 +201,8 @@ const isChat     = pathname.startsWith('/chat');
 
   const SPACING  = 28;
   const DOT_R    = 1;
-  const RADIUS   = 80;
-  const STRENGTH = 0.28;
+  const RADIUS   = 140;
+  const STRENGTH = 0.55;
   const SPRING_K = 0.12;
   const DAMPING  = 0.75;
   const IDLE_EPS = 0.01;

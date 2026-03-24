@@ -138,6 +138,7 @@ img, video {
   border-bottom: 1px solid var(--border);
   margin-bottom: 2rem;
   transition: background-color 300ms;
+
 }
 
 .nav-inner {
@@ -259,7 +260,7 @@ img, video {
 /* ── Main + page layout ────────────────────────────────────── */
 main {
   flex: 1;
-  padding-bottom: 2rem;
+  padding-bottom: 0;
   display: flex;
   flex-direction: column;
 }
@@ -380,7 +381,7 @@ main {
 /* ── Footer ────────────────────────────────────────────────── */
 .site-footer {
   border-top: 1px solid var(--border);
-  padding-block: 1rem 1.5rem;
+  padding-block: 0.75rem 1rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -399,34 +400,8 @@ main {
   letter-spacing: 0.06em;
 }
 
-/* ── View Transitions ──────────────────────────────────────── */
-@keyframes vt-in {
-  from { opacity: 0; translate: 0 7px; }
-  to   { opacity: 1; translate: 0 0;   }
-}
-@keyframes vt-out {
-  from { opacity: 1; translate: 0  0;  }
-  to   { opacity: 0; translate: 0 -4px; }
-}
-
-@keyframes expand-tracking {
-  from { letter-spacing: 0.02em; }
-  to   { letter-spacing: 0.12em; }
-}
-
-::view-transition-old(root) {
-  animation: 160ms ease-in both vt-out;
-}
-::view-transition-new(root) {
-  animation: 320ms cubic-bezier(0.16, 1, 0.3, 1) both vt-in;
-}
-
+/* ── Reduced motion overrides ──────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
-  ::view-transition-old(root),
-  ::view-transition-new(root) {
-    animation: none;
-  }
-
   /* Remove spatial transitions — keep color-only transitions */
   .elsewhere-link {
     transition: color 250ms;

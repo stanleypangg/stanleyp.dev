@@ -1,0 +1,201 @@
+---
+// Cursor: small precise dot + spring-physics trailing ring.
+// startViewTransition is overridden in Layout.astro to use a manual <main>
+// fade — no ::view-transition top layer is created, so the cursor is never
+// hidden or frozen during navigation. astro:after-swap re-grabs elements and
+// restores state (works for both static and SSR pages).
+---
+
+<div id="cursor-dot"  aria-hidden="true"></div>
+<div id="cursor-ring" aria-hidden="true"></div>
+
+<style is:global>
+  /* cursor: none — only when JS has confirmed a pointer device */
+  html.cursor-active,
+  html.cursor-active * {
+    cursor: none !important;
+  }
+
+  #cursor-dot {
+    pointer-events: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--fg);
+    z-index: 10000;
+    will-change: transform;
+    opacity: 0;
+    transition: opacity 0.25s ease;
+  }
+
+  #cursor-ring {
+    pointer-events: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 1px solid var(--fg);
+    opacity: 0;
+    z-index: 9999;
+    will-change: transform;
+    /*
+      transform uses calc(Xpx - 50%) so the ring stays centered on the spring
+      position even as its dimensions animate — 50% resolves to the live width/height.
+    */
+    transition:
+      opacity 0.25s ease,
+      width  0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+      height 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  }
+
+  #cursor-ring.ring-hover {
+    width:  42px;
+    height: 42px;
+  }
+
+  /* ring-click must come after ring-hover so it wins when both are present */
+  #cursor-ring.ring-click {
+    width:  18px;
+    height: 18px;
+  }
+
+  /* Never show custom cursor on touch-only devices */
+  @media (hover: none) {
+    #cursor-dot,
+    #cursor-ring { display: none; }
+  }
+</style>
+
+<script>
+  // ── Spring-physics cursor ─────────────────────────────────────────────
+
+  const prefersReducedMotion =
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  if (!prefersReducedMotion && window.matchMedia('(hover: hover)').matches) {
+    const STIFFNESS   = 0.12;
+    const DAMPING     = 0.78;
+    const INTERACTIVE = 'a, button, [role="button"], input, textarea, select, label';
+
+    let dot  = document.getElementById('cursor-dot')  as HTMLElement | null;
+    let ring = document.getElementById('cursor-ring') as HTMLElement | null;
+
+    let mx = -300, my = -300;
+    let rx = -300, ry = -300;
+    let vx = 0,    vy = 0;
+    let visible  = false;
+    let hovering = false;
+    let clicking = false;
+
+    function frame() {
+      if (dot && ring) {
+        const ax = (mx - rx) * STIFFNESS;
+        const ay = (my - ry) * STIFFNESS;
+        vx = (vx + ax) * DAMPING;
+        vy = (vy + ay) * DAMPING;
+        rx += vx;
+        ry += vy;
+        dot.style.transform  = `translate(calc(${mx}px - 50%), calc(${my}px - 50%))`;
+        ring.style.transform = `translate(calc(${rx}px - 50%), calc(${ry}px - 50%))`;
+      }
+      requestAnimationFrame(frame);
+    }
+
+    // ── Global listeners ─────────────────────────────────────────────────
+
+    document.addEventListener('mousemove', (e: MouseEvent) => {
+      mx = e.clientX;
+      my = e.clientY;
+      if (!visible && dot && ring) {
+        visible = true;
+        rx = mx; ry = my;
+        dot.style.opacity  = '1';
+        ring.style.opacity = hovering ? '0.32' : '0.2';
+      }
+    }, { passive: true });
+
+    document.addEventListener('mouseleave', () => {
+      visible = false;
+      if (dot)  dot.style.opacity  = '0';
+      if (ring) ring.style.opacity = '0';
+    });
+
+    document.addEventListener('mouseover', (e: MouseEvent) => {
+      if (!(e.target as Element).closest(INTERACTIVE)) return;
+      hovering = true;
+      if (!ring || !visible) return;
+      ring.classList.add('ring-hover');
+      ring.style.opacity = '0.32';
+    });
+
+    document.addEventListener('mouseout', (e: MouseEvent) => {
+      if (!(e.target as Element).closest(INTERACTIVE)) return;
+      hovering = false;
+      if (!ring) return;
+      ring.classList.remove('ring-hover');
+      if (visible) ring.style.opacity = '0.2';
+    });
+
+    document.addEventListener('mousedown', (e: MouseEvent) => {
+      if (e.button !== 0) return;
+      clicking = true;
+      ring?.classList.add('ring-click');
+    });
+
+    document.addEventListener('mouseup', (e: MouseEvent) => {
+      if (e.button !== 0) return;
+      clicking = false;
+      ring?.classList.remove('ring-click');
+    });
+
+    // astro:after-swap fires inside startViewTransition()'s callback,
+    // BEFORE the browser captures the new-state snapshot.
+    // Re-grabbing elements and restoring their state here means the
+    // new-state snapshot sees the cursor exactly as it was — so with
+    // animation:none the cursor appears uninterrupted across navigations.
+    document.addEventListener('astro:after-swap', () => {
+      document.documentElement.classList.add('cursor-active');
+
+      dot  = document.getElementById('cursor-dot')  as HTMLElement | null;
+      ring = document.getElementById('cursor-ring') as HTMLElement | null;
+
+      if (!dot || !ring) return;
+
+      // Disable the opacity transition so the restore is instant —
+      // if it fades in, the new-state snapshot captures a mid-fade opacity.
+      dot.style.transition  = 'none';
+      ring.style.transition = 'none';
+
+      if (visible) {
+        // Re-check what's actually under the cursor — mouseout fires on
+        // destroyed DOM nodes during the swap, which clears hovering state.
+        const elAtPoint = document.elementFromPoint(mx, my);
+        hovering = !!elAtPoint?.closest(INTERACTIVE);
+
+        clicking = false;
+        rx = mx; ry = my; vx = 0; vy = 0;
+        dot.style.opacity  = '1';
+        ring.style.opacity = hovering ? '0.32' : '0.2';
+        dot.style.transform  = `translate(calc(${mx}px - 50%), calc(${my}px - 50%))`;
+        ring.style.transform = `translate(calc(${rx}px - 50%), calc(${ry}px - 50%))`;
+        ring.classList.toggle('ring-hover', hovering);
+        ring.classList.remove('ring-click');
+      }
+
+      // Re-enable transitions on next frame so the restore is instant
+      requestAnimationFrame(() => {
+        if (dot)  dot.style.transition  = '';
+        if (ring) ring.style.transition = '';
+      });
+    });
+
+    // Bootstrap
+    document.documentElement.classList.add('cursor-active');
+    requestAnimationFrame(frame);
+  }
+</script>
