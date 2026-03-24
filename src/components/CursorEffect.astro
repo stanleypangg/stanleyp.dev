@@ -78,7 +78,7 @@
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   if (!prefersReducedMotion && window.matchMedia('(hover: hover)').matches) {
-    const STIFFNESS   = 0.12;
+    const STIFFNESS   = 0.20;
     const DAMPING     = 0.78;
     const INTERACTIVE = 'a, button, [role="button"], input, textarea, select, label';
 
@@ -91,6 +91,9 @@
     let visible  = false;
     let hovering = false;
     let clicking = false;
+    let rafId: number | null = null;
+
+    const IDLE_EPS = 0.08; // px threshold for "settled"
 
     function frame() {
       if (dot && ring) {
@@ -103,7 +106,21 @@
         dot.style.transform  = `translate(calc(${mx}px - 50%), calc(${my}px - 50%))`;
         ring.style.transform = `translate(calc(${rx}px - 50%), calc(${ry}px - 50%))`;
       }
-      requestAnimationFrame(frame);
+
+      // Stop the loop when the ring has settled on the cursor
+      const settled =
+        Math.abs(vx) < IDLE_EPS && Math.abs(vy) < IDLE_EPS &&
+        Math.abs(mx - rx) < IDLE_EPS && Math.abs(my - ry) < IDLE_EPS;
+
+      if (settled) {
+        rafId = null;
+      } else {
+        rafId = requestAnimationFrame(frame);
+      }
+    }
+
+    function startFrame() {
+      if (rafId === null) rafId = requestAnimationFrame(frame);
     }
 
     // ── Global listeners ─────────────────────────────────────────────────
@@ -117,6 +134,7 @@
         dot.style.opacity  = '1';
         ring.style.opacity = hovering ? '0.32' : '0.2';
       }
+      startFrame();
     }, { passive: true });
 
     document.addEventListener('mouseleave', () => {
@@ -192,10 +210,13 @@
         if (dot)  dot.style.transition  = '';
         if (ring) ring.style.transition = '';
       });
+
+      // Resume the RAF loop if the cursor is still visible on the new page
+      if (visible) startFrame();
     });
 
     // Bootstrap
     document.documentElement.classList.add('cursor-active');
-    requestAnimationFrame(frame);
+    startFrame();
   }
 </script>
