@@ -2,24 +2,34 @@
 import Layout from '../layouts/Layout.astro';
 ---
 
-<Layout title="Chat — Stanley Pang" description="Say something.">
+<Layout title="Chat" description="Say something." noindex>
   <div class="chat-wrap">
     <header class="page-header">
       <h1 class="page-title">Chat</h1>
     </header>
+    <hr class="rule" />
 
-    <div style="margin-top: 1.5rem;"></div>
+    <div class="chat-feed-wrap">
+      <div class="chat-loader" id="chat-loader" aria-hidden="true">
+        <div class="chat-spinner"></div>
+      </div>
+      <div
+        class="chat-feed"
+        id="chat-feed"
+        role="log"
+        aria-live="polite"
+        aria-label="Chat messages"
+      ></div>
+      <button
+        class="chat-scroll-btn"
+        id="chat-scroll-btn"
+        aria-label="Scroll to latest messages"
+        tabindex="-1"
+      >↓</button>
+    </div>
 
-    <div
-      class="chat-feed"
-      id="chat-feed"
-      role="log"
-      aria-live="polite"
-      aria-label="Chat messages"
-    ></div>
-
-    <dialog id="chat-blocked" class="chat-dialog">
-      <p>please don't send that.</p>
+    <dialog id="chat-blocked" class="chat-dialog" aria-labelledby="chat-blocked-msg">
+      <p id="chat-blocked-msg">please don't send that.</p>
       <button autofocus>ok</button>
     </dialog>
 
@@ -33,27 +43,31 @@ import Layout from '../layouts/Layout.astro';
         required
         aria-label="Display name"
       />
-      <input
-        type="text"
-        id="chat-msg"
-        class="chat-input chat-input--msg"
-        placeholder="say something..."
-        maxlength="500"
-        required
-        aria-label="Message"
-      />
+      <div class="chat-msg-wrap">
+        <input
+          type="text"
+          id="chat-msg"
+          class="chat-input chat-input--msg"
+          placeholder="say something..."
+          maxlength="500"
+          required
+          aria-label="Message"
+        />
+        <output class="chat-char-left" id="chat-char-left" aria-hidden="true"></output>
+      </div>
       <button type="submit" class="chat-send" aria-label="Send message">↵</button>
     </form>
   </div>
 </Layout>
 
 <script>
-  import { createBrowserClient } from '../lib/supabase';
+  import { createRealtimeClient } from '../lib/supabase-realtime';
+  import type { RealtimeChannel } from '../lib/supabase-realtime';
   import type { ChatMessage } from '../lib/supabase';
-  import type { RealtimeChannel } from '@supabase/supabase-js';
   import { esc } from '../lib/music-utils';
 
   let channel: RealtimeChannel | null = null;
+  let scrollIdleTimer: ReturnType<typeof setTimeout> | undefined;
 
   function formatTime(iso: string): string {
     const d = new Date(iso);
@@ -83,52 +97,138 @@ import Layout from '../layouts/Layout.astro';
     const form = document.getElementById('chat-form') as HTMLFormElement | null;
     const nameInput = document.getElementById('chat-name') as HTMLInputElement | null;
     const msgInput = document.getElementById('chat-msg') as HTMLInputElement | null;
+    const loader = document.getElementById('chat-loader');
+    const charLeft = document.getElementById('chat-char-left') as HTMLOutputElement | null;
     if (!feed || !form || !nameInput || !msgInput) return;
+    const sendBtn = form.querySelector('button') as HTMLButtonElement | null;
+
+    // Keep feed hidden while spinner shows
+    feed.style.opacity = '0';
 
     // Restore saved display name
     try {
       const saved = localStorage.getItem('chat_display_name');
-      if (saved) nameInput.value = saved;
+      if (saved) nameInput.value = saved.trim().slice(0, 32);
     } catch {}
 
-    // Loading state
-    feed.innerHTML = `<div class="chat-skeleton" role="status" aria-label="Loading messages">
-      <div class="chat-skeleton-line"><span class="chat-skeleton-time-bar"></span><span class="chat-skeleton-name-bar"></span><span class="chat-skeleton-text-bar" style="width:62%"></span></div>
-      <div class="chat-skeleton-line"><span class="chat-skeleton-time-bar"></span><span class="chat-skeleton-name-bar" style="width:3.8rem"></span><span class="chat-skeleton-text-bar" style="width:41%"></span></div>
-      <div class="chat-skeleton-line"><span class="chat-skeleton-time-bar"></span><span class="chat-skeleton-name-bar"></span><span class="chat-skeleton-text-bar" style="width:55%"></span></div>
-      <div class="chat-skeleton-line"><span class="chat-skeleton-time-bar"></span><span class="chat-skeleton-name-bar" style="width:3.2rem"></span><span class="chat-skeleton-text-bar" style="width:35%"></span></div>
-      <div class="chat-skeleton-line"><span class="chat-skeleton-time-bar"></span><span class="chat-skeleton-name-bar"></span><span class="chat-skeleton-text-bar" style="width:48%"></span></div>
-    </div>`;
-
-    const supabase = createBrowserClient();
-
-    const { data: messages, error } = await supabase
-      .from('chat_messages')
-      .select('id, display_name, content, created_at')
-      .order('created_at', { ascending: true })
-      .limit(50);
-
-    if (error) {
-      feed.innerHTML = '<p class="chat-empty">failed to load messages.</p>';
-      return;
+    let messages: ChatMessage[] | null = null;
+    let error = false;
+    try {
+      const res = await fetch('/api/chat');
+      messages = res.ok ? await res.json() : null;
+      error = !res.ok;
+    } catch {
+      error = true;
     }
 
-    if (messages.length === 0) {
+    if (error || !messages) {
+      feed.innerHTML = '<p class="chat-empty">failed to load messages.</p>';
+    } else if (messages.length === 0) {
       feed.innerHTML = '<p class="chat-empty">no messages yet.</p>';
     } else {
-      feed.innerHTML = (messages as ChatMessage[]).map((m) => renderMessage(m)).join('');
+      feed.innerHTML = messages.map((m) => renderMessage(m)).join('');
       feed.scrollTop = feed.scrollHeight;
     }
 
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!reducedMotion) {
+      // Spinner fades out as chat fades in simultaneously
+      loader?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 300, easing: 'ease-out', fill: 'forwards' });
+      feed.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 400, easing: 'ease-out', fill: 'forwards' });
+    } else {
+      feed.style.opacity = '';
+      if (loader) loader.style.display = 'none';
+    }
+    if (error) return;
+
     // Realtime subscription
-    channel = supabase
+    const rtClient = createRealtimeClient();
+    channel = rtClient
       .channel('chat-room')
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'chat_messages' },
-        (payload) => { appendMessage(payload.new as ChatMessage); },
+        (payload) => {
+          const { id, display_name, content, created_at } = payload.new as Record<string, unknown>;
+          appendMessage({ id, display_name, content, created_at } as ChatMessage);
+        },
       )
       .subscribe();
+
+    // Drag-to-scroll
+    let isDragging = false;
+    let startY = 0;
+    let startScroll = 0;
+    let lastY = 0;
+    let velocity = 0;
+    let rafId = 0;
+
+    feed.addEventListener('pointerdown', (e) => {
+      cancelAnimationFrame(rafId);
+      isDragging = true;
+      startY = e.clientY;
+      lastY = e.clientY;
+      startScroll = feed.scrollTop;
+      velocity = 0;
+      feed.setPointerCapture(e.pointerId);
+      feed.classList.add('dragging');
+    });
+
+    feed.addEventListener('pointermove', (e) => {
+      if (!isDragging) return;
+      velocity = lastY - e.clientY;
+      lastY = e.clientY;
+      feed.scrollTop = startScroll - (e.clientY - startY);
+    });
+
+    feed.addEventListener('pointerup', () => {
+      isDragging = false;
+      feed.classList.remove('dragging');
+      let v = velocity;
+      function coast() {
+        if (Math.abs(v) < 0.5) return;
+        feed.scrollTop += v;
+        v *= 0.92;
+        rafId = requestAnimationFrame(coast);
+      }
+      rafId = requestAnimationFrame(coast);
+    });
+
+    // Scroll-to-bottom button
+    const scrollBtn = document.getElementById('chat-scroll-btn') as HTMLButtonElement | null;
+
+    function updateScrollBtn() {
+      if (!scrollBtn) return;
+      const atBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 60;
+      scrollBtn.classList.toggle('visible', !atBottom);
+    }
+
+    scrollBtn?.addEventListener('click', () => {
+      feed.scrollTo({ top: feed.scrollHeight, behavior: 'smooth' });
+    });
+
+    // Auto-hiding scrollbar + scroll-to-bottom sync + top fade
+    const updateTopFade = () => feed.classList.toggle('at-top', feed.scrollTop === 0);
+    feed.addEventListener('scroll', () => {
+      feed.classList.add('is-scrolling');
+      clearTimeout(scrollIdleTimer);
+      scrollIdleTimer = setTimeout(() => {
+        feed.classList.remove('is-scrolling');
+      }, 1200);
+      updateScrollBtn();
+      updateTopFade();
+    }, { passive: true });
+
+    updateScrollBtn();
+    updateTopFade();
+
+    // Character counter — appears at ≤80 chars remaining
+    msgInput.addEventListener('input', () => {
+      if (!charLeft) return;
+      const remaining = 500 - msgInput.value.length;
+      charLeft.textContent = remaining.toString();
+      charLeft.classList.toggle('visible', remaining <= 80);
+    });
 
     // Form submit
     let sending = false;
@@ -157,6 +257,17 @@ import Layout from '../layouts/Layout.astro';
 
         if (res.ok) {
           msgInput.value = '';
+          // Reset char counter
+          if (charLeft) { charLeft.textContent = ''; charLeft.classList.remove('visible'); }
+          // ↵ → ✓ flash
+          if (sendBtn) {
+            sendBtn.textContent = '✓';
+            sendBtn.classList.add('chat-send--sent');
+            setTimeout(() => {
+              sendBtn.textContent = '↵';
+              sendBtn.classList.remove('chat-send--sent');
+            }, 550);
+          }
         } else {
           const data: { error?: string } = await res.json().catch(() => ({ error: 'Send failed' }));
           if (res.status === 400 && data.error === 'Message contains prohibited content') {
@@ -203,6 +314,7 @@ import Layout from '../layouts/Layout.astro';
       channel.unsubscribe();
       channel = null;
     }
+    clearTimeout(scrollIdleTimer);
   }
 
   document.addEventListener('astro:page-load', () => {
@@ -239,25 +351,115 @@ import Layout from '../layouts/Layout.astro';
     letter-spacing: -0.01em;
   }
 
+  /* ── Constrain wrap/main to viewport on chat page ─────────── */
+  :global(.wrap) { height: 100dvh; }
+  :global(main)  { min-height: 0; }
+
+  /* Override .rule margin-bottom so the feed clips right at the hr line */
+  hr {
+    margin-bottom: 0;
+  }
+
+  /* ── Feed wrapper — holds spinner overlay + scrollable feed ── */
+  .chat-feed-wrap {
+    flex: 1;
+    position: relative;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  /* ── Spinner overlay ───────────────────────────────────── */
+  .chat-loader {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+  }
+
+  .chat-spinner {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 1.5px solid var(--border);
+    border-top-color: var(--muted);
+    animation: spin 0.9s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
   /* ── Feed ──────────────────────────────────────────────── */
   .chat-feed {
-    flex: 1;
+    width: 100%;
+    height: 100%;
     overflow-y: auto;
+    cursor: grab;
     overflow-x: hidden;
     display: flex;
     flex-direction: column;
     gap: 0.3rem;
-    min-height: 8rem;
-    max-height: 60vh;
-    margin-bottom: 1.25rem;
-    padding-right: 0.25rem;
-    animation: enter-up 560ms cubic-bezier(0.16, 1, 0.3, 1) 90ms both;
+    padding: 0.75rem 0.25rem 0.75rem 0;
+    /* Older messages fade at top — suppressed when nothing is above */
+    mask-image: linear-gradient(to bottom, transparent 0%, black 2rem);
   }
 
-  .chat-feed::-webkit-scrollbar        { width: 3px; }
+  .chat-feed.at-top { mask-image: none; }
+  .chat-feed.dragging { cursor: grabbing; user-select: none; }
+
+  /* ── Scroll-to-bottom button ───────────────────────────── */
+  .chat-scroll-btn {
+    position: absolute;
+    bottom: 0.6rem;
+    right: 0.5rem;
+    width: 1.4rem;
+    height: 1.4rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-text);
+    font-size: 0.6rem;
+    line-height: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--subtle);
+    cursor: pointer;
+    border-radius: 50%;
+    opacity: 0;
+    translate: 0 4px;
+    transition:
+      opacity 220ms ease-out,
+      translate 280ms cubic-bezier(0.16, 1, 0.3, 1),
+      color 150ms,
+      border-color 150ms;
+    pointer-events: none;
+  }
+
+  .chat-scroll-btn.visible {
+    opacity: 1;
+    translate: 0 0;
+    pointer-events: auto;
+  }
+
+  .chat-scroll-btn:hover {
+    color: var(--fg);
+    border-color: var(--muted);
+  }
+
+  .chat-feed::-webkit-scrollbar        { width: 2px; }
   .chat-feed::-webkit-scrollbar-track  { background: transparent; }
-  .chat-feed::-webkit-scrollbar-thumb  { background: var(--border); border-radius: 2px; }
+  .chat-feed::-webkit-scrollbar-thumb  {
+    background: color-mix(in oklch, var(--border) 0%, transparent);
+    border-radius: 2px;
+    transition: background 450ms ease-out;
+  }
   .chat-feed::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+  .chat-feed.is-scrolling::-webkit-scrollbar-thumb {
+    background: var(--border);
+    transition: background 120ms ease-in;
+  }
 
   /* :global() — innerHTML-injected message elements */
   :global(.chat-line) {
@@ -309,55 +511,6 @@ import Layout from '../layouts/Layout.astro';
     font-weight: 300;
   }
 
-  /* ── Skeleton loader ───────────────────────────────────── */
-  :global(.chat-skeleton) {
-    display: flex;
-    flex-direction: column;
-    gap: 0.3rem;
-    width: 100%;
-    padding: 0.1rem 0;
-  }
-
-  :global(.chat-skeleton-line) {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-    min-height: 1.3rem;
-    animation: skeleton-pulse 2s ease-in-out infinite;
-  }
-
-  :global(.chat-skeleton-line:nth-child(1)) { animation-delay: 0s; }
-  :global(.chat-skeleton-line:nth-child(2)) { animation-delay: 0.22s; }
-  :global(.chat-skeleton-line:nth-child(3)) { animation-delay: 0.44s; }
-  :global(.chat-skeleton-line:nth-child(4)) { animation-delay: 0.66s; }
-  :global(.chat-skeleton-line:nth-child(5)) { animation-delay: 0.88s; }
-
-  :global(.chat-skeleton-time-bar) {
-    height: 7px;
-    width: 7.5rem;
-    flex-shrink: 0;
-    background: var(--border);
-    border-radius: 1px;
-  }
-
-  :global(.chat-skeleton-name-bar) {
-    height: 9px;
-    width: 5rem;
-    flex-shrink: 0;
-    background: var(--border);
-    border-radius: 1px;
-  }
-
-  :global(.chat-skeleton-text-bar) {
-    height: 9px;
-    background: var(--border);
-    border-radius: 1px;
-  }
-
-  @keyframes skeleton-pulse {
-    0%, 100% { opacity: 1; }
-    50%       { opacity: 0.25; }
-  }
 
   /* ── Form ──────────────────────────────────────────────── */
   .chat-form {
@@ -367,7 +520,7 @@ import Layout from '../layouts/Layout.astro';
     border-top: 1px solid var(--border);
     padding-top: 0.75rem;
     flex-shrink: 0;
-    animation: enter-up 560ms cubic-bezier(0.16, 1, 0.3, 1) 160ms both;
+    animation: enter-up 560ms cubic-bezier(0.16, 1, 0.3, 1) 150ms both;
   }
 
   .chat-input {
@@ -375,12 +528,18 @@ import Layout from '../layouts/Layout.astro';
     font-size: var(--text-xs);
     font-weight: 300;
     color: var(--fg);
-    background: transparent;
+    /* Underline grows from center on focus — two-layer background technique */
+    background-color: transparent;
+    background-image:
+      linear-gradient(var(--fg), var(--fg)),
+      linear-gradient(var(--border), var(--border));
+    background-size: 0% 1px, 100% 1px;
+    background-position: bottom center, bottom;
+    background-repeat: no-repeat;
     border: none;
-    border-bottom: 1px solid var(--border);
     padding: 0.4rem 0;
     outline: none;
-    transition: border-color 200ms, opacity 200ms;
+    transition: background-size 260ms cubic-bezier(0.16, 1, 0.3, 1), opacity 200ms;
   }
 
   .chat-input::placeholder {
@@ -388,11 +547,45 @@ import Layout from '../layouts/Layout.astro';
   }
 
   .chat-input:focus {
-    border-bottom-color: var(--fg);
+    background-size: 100% 1px, 100% 1px;
+  }
+
+  /* Keyboard focus: restore visible indicator suppressed by outline:none */
+  .chat-input:focus-visible {
+    outline: 1.5px solid var(--fg);
+    outline-offset: 3px;
+    border-radius: 1px;
   }
 
   .chat-input--name { width: 7rem; flex-shrink: 0; }
-  .chat-input--msg  { flex: 1; min-width: 0; }
+  .chat-input--msg  { width: 100%; }
+
+  /* Wrapper gives --msg its flex slot and anchors the char counter */
+  .chat-msg-wrap {
+    flex: 1;
+    min-width: 0;
+    position: relative;
+  }
+
+  /* Character counter — fades in near the limit */
+  .chat-char-left {
+    position: absolute;
+    top: -1.2rem;
+    right: 0;
+    font-size: var(--text-2xs);
+    font-family: var(--font-text);
+    font-variant-numeric: tabular-nums;
+    color: var(--subtle);
+    line-height: 1;
+    opacity: 0;
+    transition: opacity 200ms;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  .chat-char-left.visible {
+    opacity: 1;
+  }
 
   .chat-send {
     font-family: var(--font-text);
@@ -409,16 +602,19 @@ import Layout from '../layouts/Layout.astro';
     justify-content: center;
     flex-shrink: 0;
     line-height: 1;
-    transition: color 200ms;
+    transition: color 200ms, transform 150ms cubic-bezier(0.16, 1, 0.3, 1);
     margin-right: -0.5rem; /* optical alignment */
   }
 
-  .chat-send:hover  { color: var(--fg); }
-  .chat-send:active { color: var(--muted); }
+  .chat-send:hover   { color: var(--fg); }
+  .chat-send:active  { color: var(--muted); transform: scale(0.82); }
   .chat-send:disabled {
     opacity: 0.35;
     cursor: not-allowed;
   }
+
+  /* Sent confirmation flash */
+  .chat-send--sent { color: var(--muted); }
 
   /* ── Blocked dialog ────────────────────────────────────── */
   .chat-dialog {
@@ -463,11 +659,6 @@ import Layout from '../layouts/Layout.astro';
   .chat-dialog button:hover { color: var(--fg); }
 
   /* ── Animations ────────────────────────────────────────── */
-  @keyframes enter-up {
-    from { opacity: 0; translate: 0 10px; }
-    to   { opacity: 1; translate: 0 0;   }
-  }
-
   @keyframes msg-in {
     from { opacity: 0; translate: 0 4px; }
     to   { opacity: 1; translate: 0 0;  }
@@ -476,20 +667,31 @@ import Layout from '../layouts/Layout.astro';
   /* ── Reduced motion ────────────────────────────────────── */
   @media (prefers-reduced-motion: reduce) {
     .page-header,
-    .chat-feed,
     .chat-form {
       animation: none;
     }
     :global(.chat-line--new) {
       animation: none;
     }
-    :global(.chat-skeleton-line) {
+    .chat-spinner {
       animation: none;
-      opacity: 0.35;
     }
-    .chat-input,
-    .chat-send {
+    /* Remove spatial/size transitions — keep color/opacity only */
+    .chat-input {
       transition: opacity 200ms;
+    }
+    .chat-send {
+      transition: color 200ms, opacity 200ms;
+    }
+    .chat-char-left {
+      transition: none;
+    }
+    .chat-scroll-btn {
+      transition: opacity 200ms, color 150ms, border-color 150ms;
+      translate: none;
+    }
+    .chat-scroll-btn.visible {
+      translate: none;
     }
   }
 </style>

@@ -1,6 +1,6 @@
 export const prerender = false;
 
-import { createHash } from 'node:crypto';
+import { hashIp } from '../../lib/hash-ip';
 import { createServerClient } from '../../lib/supabase';
 import LeoProfanity from 'leo-profanity';
 
@@ -16,12 +16,19 @@ function containsBlocked(text: string): boolean {
   return BLOCKED.some((w: string) => normalized.includes(w));
 }
 
-function hashIp(ip: string): string {
-  const salt = import.meta.env.IP_SALT || import.meta.env.SUPABASE_SERVICE_ROLE_KEY || '';
-  return createHash('sha256')
-    .update(ip + salt)
-    .digest('hex')
-    .slice(0, 16);
+
+export async function GET() {
+  const supabase = createServerClient();
+  const { data, error } = await supabase
+    .from('chat_messages')
+    .select('id, display_name, content, created_at')
+    .order('created_at', { ascending: false })
+    .limit(50);
+
+  if (error) {
+    return json({ error: 'Failed to load messages' }, 500);
+  }
+  return json((data ?? []).reverse());
 }
 
 export async function POST({ request, clientAddress }: { request: Request; clientAddress: string }) {
@@ -59,7 +66,12 @@ export async function POST({ request, clientAddress }: { request: Request; clien
   if (!ip) {
     return json({ error: 'Unable to determine client IP' }, 400);
   }
-  const ipHash = hashIp(ip);
+  let ipHash: string;
+  try {
+    ipHash = hashIp(ip);
+  } catch {
+    return json({ error: 'Internal server error' }, 500);
+  }
 
   const supabase = createServerClient();
 
