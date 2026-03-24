@@ -3,7 +3,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
 
-beforeEach(() => mockFetch.mockReset());
+// Reset both the global fetch mock and module-level caches before each test
+beforeEach(async () => {
+  mockFetch.mockReset();
+  const { _resetCaches } = await import('./spotify');
+  _resetCaches();
+});
 
 describe('getArtistData', () => {
   it('returns the smallest image at or above 300px width', async () => {
@@ -124,5 +129,95 @@ describe('getArtistData', () => {
     });
     const { getArtistData } = await import('./spotify');
     expect(await getArtistData('Artist', 'tok')).toEqual({ imageUrl: null, spotifyUrl: null });
+  });
+
+  it('returns cached result on second call without hitting fetch', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        artists: {
+          items: [{
+            name: 'Cached Artist',
+            images: [{ url: 'https://img/300.jpg', width: 300, height: 300 }],
+            external_urls: { spotify: 'https://open.spotify.com/artist/cached' },
+          }],
+        },
+      }),
+    });
+
+    const { getArtistData } = await import('./spotify');
+    const first  = await getArtistData('Cached Artist', 'tok');
+    const second = await getArtistData('Cached Artist', 'tok');
+
+    expect(first).toEqual(second);
+    expect(mockFetch).toHaveBeenCalledTimes(1); // second call served from cache
+  });
+
+  it('cache lookup is case-insensitive', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        artists: {
+          items: [{
+            name: 'Pink Floyd',
+            images: [{ url: 'https://img/300.jpg', width: 300, height: 300 }],
+            external_urls: { spotify: 'https://open.spotify.com/artist/pf' },
+          }],
+        },
+      }),
+    });
+
+    const { getArtistData } = await import('./spotify');
+    await getArtistData('Pink Floyd', 'tok');
+    await getArtistData('pink floyd', 'tok'); // different casing
+
+    expect(mockFetch).toHaveBeenCalledTimes(1); // second call hits cache
+  });
+
+  it('caches null results to avoid re-fetching missing artists', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ artists: { items: [] } }),
+    });
+
+    const { getArtistData } = await import('./spotify');
+    await getArtistData('Unknown Artist', 'tok');
+    await getArtistData('Unknown Artist', 'tok');
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('getClientToken', () => {
+  it('returns the access token on success', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ access_token: 'my-token', expires_in: 3600 }),
+    });
+
+    const { getClientToken } = await import('./spotify');
+    const token = await getClientToken('id', 'secret');
+    expect(token).toBe('my-token');
+  });
+
+  it('returns null on HTTP error', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 401 });
+    const { getClientToken } = await import('./spotify');
+    expect(await getClientToken('id', 'secret')).toBeNull();
+  });
+
+  it('returns cached token on second call without hitting fetch', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ access_token: 'cached-token', expires_in: 3600 }),
+    });
+
+    const { getClientToken } = await import('./spotify');
+    const first  = await getClientToken('id', 'secret');
+    const second = await getClientToken('id', 'secret');
+
+    expect(first).toBe('cached-token');
+    expect(second).toBe('cached-token');
+    expect(mockFetch).toHaveBeenCalledTimes(1); // second call served from cache
   });
 });
