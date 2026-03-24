@@ -395,13 +395,32 @@ const isChat     = pathname.startsWith('/chat');
 
   // ── Visitor counter ───────────────────────────────────────
   const VISITORS_KEY = 'visitor-count-cache';
+  const VISITOR_ID_KEY = 'visitor-id';
+
+  function getOrCreateVisitorId(): string {
+    let id = localStorage.getItem(VISITOR_ID_KEY);
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem(VISITOR_ID_KEY, id);
+    }
+    return id;
+  }
 
   async function trackAndShowVisitors() {
     const el = document.getElementById('visitor-count');
     if (!el) return;
     const cached = localStorage.getItem(VISITORS_KEY);
     if (cached) el.textContent = Number(cached).toLocaleString();
-    fetch('/api/views', { method: 'POST' }).catch(() => {});
+
+    const visitorId = getOrCreateVisitorId();
+    try {
+      await fetch('/api/views', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ visitorId }),
+      });
+    } catch { /* network failure, continue to GET */ }
+
     try {
       const res = await fetch('/api/views');
       if (res.ok) {

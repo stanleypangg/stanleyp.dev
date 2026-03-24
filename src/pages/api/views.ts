@@ -1,6 +1,5 @@
 export const prerender = false;
 
-import { hashIp } from '../../lib/hash-ip';
 import { createServerClient } from '../../lib/supabase';
 
 export async function GET() {
@@ -14,25 +13,31 @@ export async function GET() {
     return json({ error: 'Failed to fetch count' }, 500);
   }
   return json({ count: count ?? 0 }, 200, {
-    'Cache-Control': 'public, max-age=60, stale-while-revalidate=3600',
+    'Cache-Control': 'private, no-cache',
   });
 }
 
-export async function POST({ clientAddress, request }: { clientAddress: string; request: Request }) {
-  const ip = clientAddress || request.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
-  if (!ip) return json({ ok: false }, 400);
-
-  let ipHash: string;
+export async function POST({ request }: { request: Request }) {
+  let body: { visitorId?: unknown };
   try {
-    ipHash = hashIp(ip);
+    body = await request.json();
   } catch {
-    return json({ ok: false }, 500);
+    return json({ ok: false, error: 'Invalid JSON' }, 400);
   }
-  const supabase = createServerClient();
 
+  const { visitorId } = body;
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (typeof visitorId !== 'string' || !UUID_RE.test(visitorId)) {
+    return json({ ok: false, error: 'Invalid visitorId' }, 400);
+  }
+
+  const supabase = createServerClient();
   const { error } = await supabase
     .from('page_views')
-    .upsert({ ip_hash: ipHash, page_path: '/' }, { onConflict: 'ip_hash,page_path', ignoreDuplicates: true });
+    .upsert(
+      { visitor_id: visitorId, page_path: '/' },
+      { onConflict: 'visitor_id,page_path', ignoreDuplicates: true }
+    );
 
   if (error) {
     console.error('[views] Upsert failed:', error.message);
