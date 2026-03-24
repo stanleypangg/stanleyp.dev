@@ -4,6 +4,8 @@ import { mapResource, sortNewestFirst } from './cloudinary';
 const baseResource = {
   public_id: 'pictures/my-photo',
   created_at: '2025-04-15T10:00:00Z',
+  width: 1200,
+  height: 800,
 };
 
 describe('mapResource', () => {
@@ -12,6 +14,21 @@ describe('mapResource', () => {
     expect(photo.src).toBe(
       'https://res.cloudinary.com/mycloud/image/upload/w_1200,f_auto,q_auto/pictures/my-photo'
     );
+  });
+
+  it('builds a srcset with 400w, 800w, 1200w variants', () => {
+    const photo = mapResource('mycloud', baseResource);
+    expect(photo.srcset).toBe(
+      'https://res.cloudinary.com/mycloud/image/upload/w_400,f_auto,q_auto/pictures/my-photo 400w, ' +
+      'https://res.cloudinary.com/mycloud/image/upload/w_800,f_auto,q_auto/pictures/my-photo 800w, ' +
+      'https://res.cloudinary.com/mycloud/image/upload/w_1200,f_auto,q_auto/pictures/my-photo 1200w'
+    );
+  });
+
+  it('preserves width and height from the resource', () => {
+    const photo = mapResource('mycloud', baseResource);
+    expect(photo.width).toBe(1200);
+    expect(photo.height).toBe(800);
   });
 
   it('formats date as "Mon YYYY"', () => {
