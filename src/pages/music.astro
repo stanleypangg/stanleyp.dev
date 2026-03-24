@@ -498,73 +498,11 @@ const lfmUser = import.meta.env.PUBLIC_LASTFM_USERNAME;
       });
     });
 
-    // ── SSR data hydration ─────────────────────────────────────────────────
-    // The server embeds a JSON island with the default 7day data. Read it once
-    // to populate in-memory state and seed localStorage caches — no fetch needed.
-    const ssrEl = document.getElementById('ssr-music-data');
-    let ssrData: {
-      period: string;
-      artists: ArtistStat[];
-      albums: AlbumStat[];
-      topTracks: TrackStat[];
-      recentTracks: Track[];
-      artistImages?: Record<string, ArtistData>;
-    } | null = null;
-    if (ssrEl) {
-      try { ssrData = JSON.parse(ssrEl.textContent ?? ''); } catch { /* malformed */ }
-    }
-
-    // Seed recent tracks cache from SSR data (images seeded after async fetch below)
-    if (ssrData) {
-      if (ssrData.recentTracks.length > 0 && !cacheGet('music_tracks', TTL.tracks)) {
-        cacheSet('music_tracks', ssrData.recentTracks);
-      }
-    }
-
     // ── Load data ──────────────────────────────────────────────────────────
-    if (ssrData && currentPeriod === ssrData.period) {
-      // SSR rendered the correct period — populate state from data island
-      lastArtists   = ssrData.artists;
-      lastAlbums    = ssrData.albums;
-      lastTopTracks = ssrData.topTracks;
-
-      const ssrImages = ssrData.artistImages ?? {};
-      if (Object.keys(ssrImages).length > 0) {
-        // SSR resolved images — seed cache immediately, no client fetch needed
-        lastImages = ssrImages;
-        cacheSet<PeriodData>(`music_period_v4_${currentPeriod}`, {
-          artists: lastArtists, albums: lastAlbums,
-          images: ssrImages, topTracks: lastTopTracks,
-        });
-      } else if (ssrData.artists.length > 0) {
-        // SSR didn't resolve images (cold start failure) — fetch client-side as fallback
-        lastImages = {};
-        const params = new URLSearchParams(ssrData.artists.map((a) => ['names', a.name]));
-        fetch(`/api/artist-images?${params}`)
-          .then((r) => r.ok ? r.json() as Promise<Record<string, ArtistData>> : Promise.resolve({} as Record<string, ArtistData>))
-          .then(async (images) => {
-            lastImages = images;
-            if (viewMode === 'grid') {
-              await renderArtists(lastArtists, new Map(Object.entries(images)));
-            } else {
-              await renderArtistsChart(lastArtists);
-            }
-            cacheSet<PeriodData>(`music_period_v4_${currentPeriod}`, {
-              artists: lastArtists, albums: lastAlbums,
-              images, topTracks: lastTopTracks,
-            });
-          })
-          .catch(() => { /* ignore */ });
-      } else {
-        lastImages = {};
-      }
-    } else {
-      // Period mismatch or SSR failed — fetch client-side as before
-      await Promise.allSettled([
-        loadPeriodData(currentPeriod),
-        loadStaticData(),
-      ]);
-    }
+    await Promise.allSettled([
+      loadPeriodData(currentPeriod),
+      loadStaticData(),
+    ]);
 
     // Warm the cache for remaining periods during browser idle time
     const scheduleIdle = (window as Window & { requestIdleCallback?: (cb: () => void) => void }).requestIdleCallback
