@@ -36,9 +36,7 @@
     if (!data.title) {
       setLabel('Listening');
       wrap.innerHTML = `<span class="np-idle">
-        <svg class="np-spotify-icon" viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
-        </svg>
+        <img class="np-cat" src="/cat-sleeping.gif" alt="Sleeping cat" width="40" height="40" />
         Not listening right now
       </span>`;
       return;
@@ -54,8 +52,18 @@
     </span>`;
 
     const safeImageUrl = data.albumImageUrl?.startsWith('https://') ? esc(data.albumImageUrl) : '';
+    const catUrl = data.isPlaying ? '/cat-bopping.webp' : '/cat-sleeping.gif';
     const img = safeImageUrl
-      ? `<img class="np-art" src="${safeImageUrl}" alt="" width="40" height="40" loading="lazy" />`
+      ? `<span class="np-flip">
+           <span class="np-flip-inner">
+             <span class="np-flip-front">
+               <img class="np-art" src="${safeImageUrl}" alt="" width="40" height="40" loading="lazy" />
+             </span>
+             <span class="np-flip-back">
+               <img class="np-art np-art-cat" src="${catUrl}" alt="${data.isPlaying ? 'Bopping cat' : 'Sleeping cat'}" width="40" height="40" />
+             </span>
+           </span>
+         </span>`
       : '';
 
     const safeSongUrl = data.songUrl?.startsWith('https://') ? esc(data.songUrl) : null;
@@ -86,14 +94,23 @@
     }
   }
 
-  // astro:page-load fires on initial load AND after every View Transition,
-  // so this handles both first render and navigating back to the home page.
-  document.addEventListener('astro:page-load', load);
   // Re-poll every 60 seconds while the tab is visible
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') load();
   });
-  setInterval(load, 60_000);
+
+  // Start/stop the 60s poll around navigations so it doesn't fire on other pages.
+  // astro:page-load fires on initial load AND after every View Transition.
+  let pollId: ReturnType<typeof setInterval> | null = null;
+
+  document.addEventListener('astro:before-swap', () => {
+    if (pollId !== null) { clearInterval(pollId); pollId = null; }
+  });
+
+  document.addEventListener('astro:page-load', () => {
+    load();
+    if (pollId === null) pollId = setInterval(load, 60_000);
+  });
 </script>
 
 <style>
@@ -155,11 +172,47 @@
     color: var(--subtle);
   }
 
-  :global(.np-spotify-icon) {
-    width: 14px;
-    height: 14px;
-    fill: currentColor;
+  :global(.np-cat) {
+    width: 40px;
+    height: 40px;
+    object-fit: cover;
     flex-shrink: 0;
+    border-radius: 1px;
+  }
+
+  :global(.np-flip) {
+    display: inline-block;
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    perspective: 400px;
+    cursor: default;
+  }
+
+  :global(.np-flip-inner) {
+    display: block;
+    width: 100%;
+    height: 100%;
+    position: relative;
+    transform-style: preserve-3d;
+    transition: transform 420ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  :global(.np-flip:hover .np-flip-inner) {
+    transform: rotateY(180deg);
+  }
+
+  :global(.np-flip-front),
+  :global(.np-flip-back) {
+    display: block;
+    position: absolute;
+    inset: 0;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+  }
+
+  :global(.np-flip-back) {
+    transform: rotateY(180deg);
   }
 
   :global(.np-wave) {
@@ -175,7 +228,8 @@
     width: 3px;
     border-radius: 1.5px;
     background: var(--subtle);
-    height: 4px;
+    height: 20px;
+    transform: scaleY(0.2);
     transform-origin: bottom;
   }
 
@@ -190,18 +244,18 @@
   :global(.np-wave--live .np-bar:nth-child(4)) { animation-duration: 1.0s; animation-delay: -0.5s; }
 
   @keyframes soundwave {
-    0%   { height: 4px;  }
-    20%  { height: 20px; }
-    40%  { height: 7px;  }
-    60%  { height: 17px; }
-    80%  { height: 5px;  }
-    100% { height: 4px;  }
+    0%   { transform: scaleY(0.2);  }
+    20%  { transform: scaleY(1);    }
+    40%  { transform: scaleY(0.35); }
+    60%  { transform: scaleY(0.85); }
+    80%  { transform: scaleY(0.25); }
+    100% { transform: scaleY(0.2);  }
   }
 
   @media (prefers-reduced-motion: reduce) {
     :global(.np-wave--live .np-bar) {
       animation: none;
-      height: 14px;
+      transform: scaleY(0.7);
     }
   }
 
@@ -210,12 +264,27 @@
     height: 40px;
     object-fit: cover;
     flex-shrink: 0;
+    display: block;
+  }
+
+  :global(.np-flip-front .np-art) {
     filter: saturate(0.7);
     transition: filter 250ms;
   }
 
-  .np-wrap:hover :global(.np-art) {
+  :global(.np-flip:hover .np-flip-front .np-art) {
     filter: saturate(1);
+  }
+
+  :global(.np-art-cat) {
+    filter: none;
+    background-color: var(--bg);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :global(.np-flip-inner) {
+      transition: none;
+    }
   }
 
   :global(.np-track) {
