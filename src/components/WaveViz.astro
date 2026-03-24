@@ -68,6 +68,7 @@
     let npPresent = !!document.getElementById('np-wrap');
 
     let logW = 0, logH = 0;
+    let canvasLeft = 0;
     let rafId = 0;
     let startTs: number | null = null;
     let visible = true;
@@ -75,6 +76,26 @@
     let hoverTarget = 0;
     let playLerp    = npPresent ? 0 : 0.55; // start at ambient on non-home pages
     let playTarget  = npPresent ? 0 : 0.55;
+    let npObserver: MutationObserver | null = null;
+
+    // Observe NowPlaying DOM for class changes that indicate play/pause state.
+    // Replaces the per-frame document.querySelector poll that ran inside tick().
+    function observePlayState() {
+      npObserver?.disconnect();
+      npObserver = null;
+      const npWrap = document.getElementById('np-wrap');
+      if (!npWrap || !npPresent) return;
+      npObserver = new MutationObserver(() => {
+        const isPlaying = !!npWrap.querySelector('.np-wave--live');
+        playTarget = isPlaying ? 1 : 0;
+        wrap!.dataset.paused = String(!isPlaying);
+      });
+      npObserver.observe(npWrap, { subtree: true, childList: true, attributes: true, attributeFilter: ['class'] });
+      // Sync immediately in case the DOM already reflects a state
+      const isPlaying = !!npWrap.querySelector('.np-wave--live');
+      playTarget = isPlaying ? 1 : 0;
+      wrap!.dataset.paused = String(!isPlaying);
+    }
 
     // Called on each navigation to update page context without restarting the loop.
     // Also forces recovery from stale observer state caused by the persist detach/reattach cycle.
@@ -87,6 +108,7 @@
       // (isIntersecting=false, size=0) during the brief detach. Reset explicitly.
       visible = true;
       setup();
+      observePlayState();
       if (!reducedMotion && rafId === 0) {
         startTs = null;
         rafId = requestAnimationFrame(tick);
@@ -115,6 +137,7 @@
     function setup() {
       const dpr  = window.devicePixelRatio || 1;
       const rect = canvas!.getBoundingClientRect();
+      canvasLeft = rect.left;
       logW = rect.width;
       logH = rect.height;
       canvas!.width  = Math.round(logW * dpr);
@@ -216,12 +239,7 @@
         if (rip.amp < 0.005) rip.alive = false;
       }
 
-      // Detect playing state — zero coupling with NowPlaying component
-      if (npPresent) {
-        playTarget = document.querySelector('.np-wave--live') ? 1 : 0;
-        wrap!.dataset.paused = String(playTarget === 0);
-      }
-      // On other pages: playTarget stays at 0.55 (ambient), no pause icon ever shown.
+      // Playing state is tracked by npObserver (MutationObserver) — not polled here.
 
       draw(t);
 
@@ -234,6 +252,7 @@
 
     // ── Init ────────────────────────────────────────────────────
     setup();
+    observePlayState();
 
     if (reducedMotion) {
       draw(0);
@@ -247,11 +266,11 @@
 
     if (!reducedMotion) {
       canvas.addEventListener('mousemove', (e: MouseEvent) => {
-        cursorX = e.clientX - canvas!.getBoundingClientRect().left;
+        cursorX = e.clientX - canvasLeft;
       }, { passive: true });
 
       canvas.addEventListener('click', (e: MouseEvent) => {
-        const clickX = e.clientX - canvas!.getBoundingClientRect().left;
+        const clickX = e.clientX - canvasLeft;
         // Find first dead slot
         for (let r = 0; r < MAX_RIPPLES; r++) {
           if (!ripples[r].alive) {
@@ -296,6 +315,8 @@
       cancelAnimationFrame(rafId);
       io.disconnect();
       ro.disconnect();
+      npObserver?.disconnect();
+      npObserver = null;
     }
 
     _cleanup = cleanup;

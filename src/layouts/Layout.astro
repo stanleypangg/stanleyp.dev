@@ -257,6 +257,7 @@ const isChat     = pathname.startsWith('/chat');
   let mouse = { x: -9999, y: -9999 };
   let rafId = 0;
   let rafRunning = false;
+  let resizeRaf = 0;
   let dotColor = '';
 
   const prefersReducedMotion =
@@ -362,7 +363,10 @@ const isChat     = pathname.startsWith('/chat');
   }
 
   // Global listeners — added once, persist across View Transitions
-  window.addEventListener('resize', resize, { passive: true });
+  window.addEventListener('resize', () => {
+    cancelAnimationFrame(resizeRaf);
+    resizeRaf = requestAnimationFrame(resize);
+  }, { passive: true });
 
   new MutationObserver(() => {
     readColor();

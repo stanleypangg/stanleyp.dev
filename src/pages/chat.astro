@@ -185,9 +185,11 @@ import Layout from '../layouts/Layout.astro';
       isDragging = false;
       feed.classList.remove('dragging');
       let v = velocity;
+      let coastScroll = feed.scrollTop;
       function coast() {
         if (Math.abs(v) < 0.5) return;
-        feed.scrollTop += v;
+        coastScroll += v;
+        feed.scrollTop = coastScroll;
         v *= 0.92;
         rafId = requestAnimationFrame(coast);
       }

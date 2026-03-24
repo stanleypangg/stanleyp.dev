@@ -601,10 +601,14 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
         gridScrollEl = null;
         let vx = gridVelX;
         let vy = gridVelY;
+        let cLeft = el.scrollLeft;
+        let cTop  = el.scrollTop;
         const coast = () => {
           if (!el || (Math.abs(vx) < 0.5 && Math.abs(vy) < 0.5)) return;
-          el.scrollLeft += vx;
-          el.scrollTop  += vy;
+          cLeft += vx;
+          cTop  += vy;
+          el.scrollLeft = cLeft;
+          el.scrollTop  = cTop;
           vx *= 0.92;
           vy *= 0.92;
           gridRafId = requestAnimationFrame(coast);
