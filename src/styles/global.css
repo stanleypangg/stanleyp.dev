@@ -9,12 +9,27 @@
 }
 
 :root.dark {
-  --bg:      oklch(10.5% 0.003 260);
+  --bg:      oklch(14%   0.003 260);
   --fg:      oklch(93%   0.004  80);
   --muted:   oklch(67%   0.003  80);  /* secondary text — ~7.6:1 against dark bg */
   --subtle:  oklch(63%   0.003  80);  /* tertiary text  — ~6.5:1 against dark bg; warm hue matches fg/muted */
-  --border:  oklch(20%   0.003 260);
-  --dot:     oklch(17%   0.003 260);
+  --border:  oklch(30%   0.003 260);
+  --dot:     oklch(33%   0.003 260);
+}
+
+/* ── Theme transition: only color-related properties ──────── */
+html.theme-transitioning,
+html.theme-transitioning *,
+html.theme-transitioning *::before,
+html.theme-transitioning *::after {
+  transition:
+    background-color 350ms ease,
+    color 350ms ease,
+    border-color 350ms ease,
+    fill 350ms ease,
+    stroke 350ms ease,
+    box-shadow 350ms ease,
+    outline-color 350ms ease !important;
 }
 
 /* ── Type tokens ───────────────────────────────────────────── */
@@ -48,6 +63,7 @@ html {
   -webkit-font-smoothing: subpixel-antialiased;
   -moz-osx-font-smoothing: auto;
   text-rendering: optimizeLegibility;
+  scrollbar-gutter: stable;
 }
 
 /* Dark mode: grayscale antialiasing is correct for light-on-dark */
@@ -104,6 +120,18 @@ body::after {
   outline: 1.5px solid var(--fg);
   outline-offset: 3px;
   border-radius: 1px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
 }
 
 a {
@@ -256,6 +284,9 @@ img, video {
 :root.dark .theme-btn::after {
   transform: translateX(100%);
 }
+.theme-btn:focus-visible {
+  border-radius: 50%;
+}
 
 /* ── Main + page layout ────────────────────────────────────── */
 main {
@@ -263,6 +294,9 @@ main {
   padding-bottom: 0;
   display: flex;
   flex-direction: column;
+  /* z-index: 0 as a flex child creates a stacking context, containing filter/opacity
+     stacking contexts from child elements below the sticky nav's z-index: 10 */
+  z-index: 0;
 }
 
 /* Pull subpage headers up to align with the homepage hero top edge */
@@ -371,11 +405,11 @@ main {
   display: inline-block;
   transition:
     color 250ms,
-    padding-left 500ms cubic-bezier(0.16, 1, 0.3, 1);
+    transform 500ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 .elsewhere-link:hover {
   color: var(--fg);
-  padding-left: 0.3rem;
+  transform: translateX(0.3rem);
 }
 
 /* ── Footer ────────────────────────────────────────────────── */
@@ -400,6 +434,35 @@ main {
   letter-spacing: 0.06em;
 }
 
+.footer-visitors {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: var(--text-2xs);
+  color: var(--subtle);
+  letter-spacing: 0.06em;
+}
+
+.footer-visitors #visitor-count {
+  color: var(--muted);
+}
+
+.eye-icon {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  background-color: currentColor;
+  -webkit-mask: url('/eye.svg') center / contain no-repeat;
+  mask: url('/eye.svg') center / contain no-repeat;
+}
+
+/* ── Page entrance animation ───────────────────────────────── */
+@keyframes enter-up {
+  from { opacity: 0; translate: 0 10px; }
+  to   { opacity: 1; translate: 0 0;   }
+}
+
 /* ── Reduced motion overrides ──────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   /* Remove spatial transitions — keep color-only transitions */
@@ -407,12 +470,20 @@ main {
     transition: color 250ms;
   }
   .elsewhere-link:hover {
-    padding-left: 0;
+    transform: none;
   }
 
   /* Remove transform from theme toggle — keep color-only */
   .theme-btn::after {
     transition: background-color 250ms;
+  }
+
+  /* Instant theme swap for users who prefer reduced motion */
+  html.theme-transitioning,
+  html.theme-transitioning *,
+  html.theme-transitioning *::before,
+  html.theme-transitioning *::after {
+    transition: none !important;
   }
 }
 
@@ -489,12 +560,13 @@ main {
 }
 
 .prose a {
+  color: var(--muted);
   text-decoration: underline;
   text-underline-offset: 3px;
   transition: color 200ms;
 }
 .prose a:hover {
-  color: var(--muted);
+  color: var(--fg);
 }
 
 .prose ul,

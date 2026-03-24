@@ -8,15 +8,26 @@ import '../styles/global.css';
 interface Props {
   title?: string;
   description?: string;
+  ogType?: 'website' | 'article';
+  ogImage?: string;
+  noindex?: boolean;
 }
 
 const {
   title = 'Stanley Pang',
   description = 'Software engineer.',
+  ogType = 'website',
+  ogImage = '/og.png',
+  noindex = false,
 } = Astro.props;
+
+const canonicalURL = new URL(Astro.url.pathname, Astro.site);
+const ogImageURL = new URL(ogImage, Astro.site).toString();
+const pageTitle = title === 'Stanley Pang' ? title : `${title} — Stanley Pang`;
 
 const pathname = Astro.url.pathname;
 const lastUpdated = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+const isHome     = pathname === '/';
 const isProjects = pathname.startsWith('/projects');
 const isWriting  = pathname.startsWith('/writing');
 const isMusic    = pathname.startsWith('/music');
@@ -30,23 +41,50 @@ const isChat     = pathname.startsWith('/chat');
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content={description} />
-    <title>Stanley Pang</title>
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="icon" type="image/png" href="/logo.png" />
+    {noindex && <meta name="robots" content="noindex,nofollow" />}
+    <title>{pageTitle}</title>
+    <link rel="canonical" href={canonicalURL} />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/logo.png" type="image/png" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="theme-color" content="oklch(97% 0.005 80)" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="oklch(12% 0 0)" media="(prefers-color-scheme: dark)" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content={ogType} />
+    <meta property="og:url" content={canonicalURL} />
+    <meta property="og:site_name" content="Stanley Pang" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:title" content={pageTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content={ogImageURL} />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:creator" content="@stanleypangg" />
+    <meta name="twitter:title" content={pageTitle} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImageURL} />
 
     <!-- Google Fonts: Fraunces (display) + DM Sans (body) -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 
-    <!-- Music page: preconnect to image CDNs so DNS+TLS is ready when images load -->
-    {isMusic && <>
-      <link rel="preconnect" href="https://i.scdn.co" crossorigin />
-      <link rel="preconnect" href="https://lastfm.freetls.fastly.net" crossorigin />
-    </>}
+    <!-- Spotify album art CDN — used by NowPlaying on home page and music page -->
+    <link rel="preconnect" href="https://i.scdn.co" crossorigin />
+    {isMusic && <link rel="preconnect" href="https://lastfm.freetls.fastly.net" crossorigin />}
     <link
+      rel="preload"
+      as="style"
       href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=DM+Sans:opsz,wght@9..40,300..400&display=swap"
-      rel="stylesheet"
+      onload="this.rel='stylesheet'"
     />
+    <noscript>
+      <link
+        href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=DM+Sans:opsz,wght@9..40,300..400&display=swap"
+        rel="stylesheet"
+      />
+    </noscript>
 
     <!-- Prevent flash of wrong theme — must be inline and synchronous -->
     <script is:inline>
@@ -131,9 +169,9 @@ const isChat     = pathname.startsWith('/chat');
     <CursorEffect />
     <canvas id="bg-dots" aria-hidden="true"></canvas>
     <div class="wrap">
-      <nav class="site-nav">
+      <nav class="site-nav" aria-label="Site navigation">
         <div class="nav-inner">
-          <a href="/" class="nav-home" aria-label="Home">
+          <a href="/" class="nav-home" aria-label="Home" aria-current={isHome ? 'page' : undefined}>
             <img src="/logo.png" alt="" class="nav-logo" width="28" height="28" />
           </a>
           <ul class="nav-links">
@@ -186,8 +224,12 @@ const isChat     = pathname.startsWith('/chat');
 
       <WaveViz />
 
-      <footer class="site-footer">
+      <footer class="site-footer" transition:persist>
         <span class="footer-updated">Updated {lastUpdated}</span>
+        <span class="footer-visitors" aria-live="polite">
+          <span class="eye-icon" aria-hidden="true"></span>
+          <span id="visitor-count">—</span>
+        </span>
       </footer>
     </div>
   </body>
@@ -346,5 +388,27 @@ const isChat     = pathname.startsWith('/chat');
   // Bootstrap
   attachCanvas();
   document.addEventListener('astro:after-swap', attachCanvas);
+
+  // ── Visitor counter ───────────────────────────────────────
+  const VISITORS_KEY = 'visitor-count-cache';
+
+  async function trackAndShowVisitors() {
+    const el = document.getElementById('visitor-count');
+    if (!el) return;
+    const cached = localStorage.getItem(VISITORS_KEY);
+    if (cached) el.textContent = Number(cached).toLocaleString();
+    fetch('/api/views', { method: 'POST' }).catch(() => {});
+    try {
+      const res = await fetch('/api/views');
+      if (res.ok) {
+        const { count } = await res.json();
+        el.textContent = count.toLocaleString();
+        localStorage.setItem(VISITORS_KEY, String(count));
+      }
+    } catch { /* silently fail */ }
+  }
+
+  trackAndShowVisitors();
+  document.addEventListener('astro:after-swap', trackAndShowVisitors);
 </script>
 </html>

@@ -1,6 +1,7 @@
 ---
 title: "summer recruiting season 2026"
 date: 2026-03-11
+description: "300+ applications, 3am leetcode sessions, dream companies falling through — an honest account of the 2026 internship grind."
 ---
 
 the past half year of my life has felt like a blur. wake up at 8am, go work at my internship until 5pm. after work, doomscroll ASU frat leader mogging clavicular for an hour (or few). then, start job hunting. i've applied for 300+ job posting with little success. i've started eating leetcode for breakfast, lunch and dinner. i've developed an addiction to checking my emails. i've stopped going to the gym consistently. i've started to find myself up at 3am just staring at my monitor. the blue light is the only thing keeping me awake while i rewrite my resume again and again. the months started passing by me, my linkedin feed filled my other people landing FAANG+ companies, no prospects.
