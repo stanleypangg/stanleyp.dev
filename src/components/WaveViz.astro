@@ -4,7 +4,7 @@
 // Shows a ⏸ icon when music is paused (home page only). Pauses RAF off-screen.
 ---
 
-<div id="wave-wrap" class="wave-wrap" data-paused="false">
+<div id="wave-wrap" class="wave-wrap" data-paused="false" transition:persist>
   <canvas
     id="wave-viz"
     class="wave-viz"
@@ -17,23 +17,35 @@
   .wave-wrap {
     position: relative;
     margin-top: 1rem;
+    height: 52px;       /* keep layout footprint stable */
+    overflow: visible;  /* allow bars to poke above */
   }
 
   .wave-viz {
     display: block;
     width: 100%;
-    height: 52px;
-    cursor: crosshair;
+    height: calc(52px + 40px); /* 40px overflow headroom above */
+    margin-top: -40px;         /* shift up; floor stays at wrap bottom */
+  }
+
+  @media (hover: hover) {
+    .wave-viz { cursor: crosshair; }
   }
 
 </style>
 
 <script>
   let _cleanup: (() => void) | null = null;
+  let _initialized = false;
+  let _updatePage: (() => void) | null = null;
 
   function initWaveViz() {
-    _cleanup?.();
-    _cleanup = null;
+    // Already running — just update page context (npPresent / playTarget)
+    if (_initialized && _updatePage) {
+      _updatePage();
+      return;
+    }
+    _initialized = true;
 
     const wrap   = document.getElementById('wave-wrap')  as HTMLDivElement      | null;
     const canvas = document.getElementById('wave-viz')   as HTMLCanvasElement   | null;
@@ -42,17 +54,18 @@
     if (!ctx) return;
 
     // ── Constants ───────────────────────────────────────────────
-    const PITCH      = 6;     // px per column (bar + gap)
-    const BAR_W      = 2;     // bar width px
-    const MIN_H      = 3;     // minimum bar height px
-    const HOVER_RATE = 0.08;  // lerp speed: hover color
-    const PLAY_RATE  = 0.018; // lerp speed: playing ↔ paused (slow, graceful)
+    const PITCH       = 6;     // px per column (bar + gap)
+    const BAR_W       = 2;     // bar width px
+    const MIN_H       = 3;     // minimum bar height px
+    const HOVER_RATE  = 0.08;  // lerp speed: hover color
+    const PLAY_RATE   = 0.018; // lerp speed: playing ↔ paused (slow, graceful)
+    const OVERFLOW_H  = 40;    // px of canvas headroom above the visible zone
 
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    // Is NowPlaying present on this page? Computed once per page load.
+    // Is NowPlaying present on this page? Mutable — updated on navigation.
     // On other pages (projects, writing…) we use a neutral ambient level.
-    const npPresent = !!document.getElementById('np-wrap');
+    let npPresent = !!document.getElementById('np-wrap');
 
     let logW = 0, logH = 0;
     let rafId = 0;
@@ -62,6 +75,41 @@
     let hoverTarget = 0;
     let playLerp    = npPresent ? 0 : 0.55; // start at ambient on non-home pages
     let playTarget  = npPresent ? 0 : 0.55;
+
+    // Called on each navigation to update page context without restarting the loop.
+    // Also forces recovery from stale observer state caused by the persist detach/reattach cycle.
+    _updatePage = () => {
+      const wasHome = npPresent;
+      npPresent = !!document.getElementById('np-wrap');
+      if (wasHome && !npPresent) playTarget = 0.55; // ambient when leaving home
+
+      // IntersectionObserver or ResizeObserver may have fired with stale state
+      // (isIntersecting=false, size=0) during the brief detach. Reset explicitly.
+      visible = true;
+      setup();
+      if (!reducedMotion && rafId === 0) {
+        startTs = null;
+        rafId = requestAnimationFrame(tick);
+      }
+    };
+
+    // ── Cursor displacement ──────────────────────────────────────
+    let cursorX    = -1;    // mouse X in CSS px from canvas left; -1 = off-canvas
+    let cursorLerp = 0;     // smoothed cursor position
+    let cursorAmp  = 0;     // 0→1: fades in on mouseenter, out on mouseleave
+    const CURSOR_RADIUS   = 60;    // px: gaussian influence half-width
+    const CURSOR_STRENGTH = 0.35;  // max upward displacement as fraction of logH
+    const CURSOR_FADE     = 0.10;  // lerp rate for enter/exit fade
+
+    // ── Click ripple pool (pre-allocated, no hot-path allocs) ────
+    let prevT = 0;
+    const MAX_RIPPLES = 6;
+    const ripples: Array<{ x: number; t: number; amp: number; alive: boolean }> = [];
+    for (let r = 0; r < MAX_RIPPLES; r++) ripples.push({ x: 0, t: 0, amp: 0, alive: false });
+    const RIPPLE_SPEED    = 120;   // px/sec radial travel
+    const RIPPLE_DECAY    = 2.2;   // sec to e^-1 amplitude decay
+    const RIPPLE_STRENGTH = 0.25;  // max displacement as fraction of logH
+    const RIPPLE_WIDTH    = 30;    // px: gaussian envelope width around wavefront
 
     // ── Canvas setup ────────────────────────────────────────────
     function setup() {
@@ -79,7 +127,7 @@
     function barColor(): string {
       const dark = document.documentElement.classList.contains('dark');
       if (dark) {
-        const lBase  = 20 + 14 * playLerp;   // 20% paused → 34% playing
+        const lBase  = 35 + 18 * playLerp;   // 35% paused → 53% playing
         const lFinal = lBase + 15 * hoverLerp;
         return `oklch(${lFinal.toFixed(1)}% 0.003 260)`;
       } else {
@@ -98,9 +146,15 @@
       // so the state change is unmistakable.
       const amp = 0.20 + 0.80 * playLerp;
 
-      const N = Math.floor(logW / PITCH);
+      // visH is the visible 52px zone; logH includes the overflow headroom above.
+      // All amplitude math uses visH so behaviour is unchanged vs. before.
+      const visH  = logH - OVERFLOW_H;
+
+      const N     = Math.floor(logW / PITCH);
+      const sigma = CURSOR_RADIUS / 2.5; // gaussian std-dev for cursor bulge
       for (let i = 0; i < N; i++) {
-        const xn = i / N;
+        const xn   = i / N;
+        const barX = i * PITCH;
 
         const wave =
           amp * (
@@ -110,9 +164,30 @@
           );
         // wave range: approx [-1.55·amp, 1.55·amp]; normalise to [0, 1]
         const norm = (wave + 1.55) / 3.1;
-        const h    = MIN_H + (logH - MIN_H) * Math.max(0, Math.min(1, norm));
+        let h = MIN_H + (visH - MIN_H) * Math.max(0, Math.min(1, norm));
 
-        ctx!.fillRect(i * PITCH, logH - h, BAR_W, h);
+        // ── Cursor proximity bulge ───────────────────────────────
+        if (cursorAmp > 0.001) {
+          const dx    = barX - cursorLerp;
+          const gauss = Math.exp(-(dx * dx) / (2 * sigma * sigma));
+          h += cursorAmp * gauss * CURSOR_STRENGTH * visH;
+        }
+
+        // ── Click ripple displacement ────────────────────────────
+        for (let r = 0; r < MAX_RIPPLES; r++) {
+          const rip = ripples[r];
+          if (!rip.alive) continue;
+          const dist      = Math.abs(barX - rip.x);
+          const wavefront = rip.t * RIPPLE_SPEED;
+          const offset    = dist - wavefront;
+          const env       = Math.exp(-(offset * offset) / (2 * RIPPLE_WIDTH * RIPPLE_WIDTH));
+          const osc       = Math.cos(offset * 0.15);
+          h += rip.amp * env * osc * RIPPLE_STRENGTH * visH;
+        }
+
+        // Allow h to grow into overflow headroom; clamp at full canvas height.
+        h = Math.max(MIN_H, Math.min(logH, h));
+        ctx!.fillRect(barX, logH - h, BAR_W, h);
       }
     }
 
@@ -124,6 +199,22 @@
       // Advance lerps
       hoverLerp += (hoverTarget - hoverLerp) * HOVER_RATE;
       playLerp  += (playTarget  - playLerp)  * PLAY_RATE;
+
+      // Advance cursor displacement state
+      const dt = startTs === null ? 0 : t - prevT;
+      prevT = t;
+      if (cursorX >= 0) cursorLerp = cursorX;
+      const cursorOn = hoverTarget === 1 ? 1 : 0;
+      cursorAmp += (cursorOn - cursorAmp) * CURSOR_FADE;
+
+      // Age ripples
+      for (let r = 0; r < MAX_RIPPLES; r++) {
+        const rip = ripples[r];
+        if (!rip.alive) continue;
+        rip.t  += dt;
+        rip.amp = Math.exp(-rip.t / RIPPLE_DECAY);
+        if (rip.amp < 0.005) rip.alive = false;
+      }
 
       // Detect playing state — zero coupling with NowPlaying component
       if (npPresent) {
@@ -150,9 +241,32 @@
       rafId = requestAnimationFrame(tick);
     }
 
-    // Hover brightening
+    // Hover brightening + cursor tracking
     canvas.addEventListener('mouseenter', () => { hoverTarget = 1; });
-    canvas.addEventListener('mouseleave', () => { hoverTarget = 0; });
+    canvas.addEventListener('mouseleave', () => { hoverTarget = 0; cursorX = -1; });
+
+    if (!reducedMotion) {
+      canvas.addEventListener('mousemove', (e: MouseEvent) => {
+        cursorX = e.clientX - canvas!.getBoundingClientRect().left;
+      }, { passive: true });
+
+      canvas.addEventListener('click', (e: MouseEvent) => {
+        const clickX = e.clientX - canvas!.getBoundingClientRect().left;
+        // Find first dead slot
+        for (let r = 0; r < MAX_RIPPLES; r++) {
+          if (!ripples[r].alive) {
+            ripples[r].x = clickX; ripples[r].t = 0; ripples[r].amp = 1; ripples[r].alive = true;
+            return;
+          }
+        }
+        // All slots full — overwrite lowest-amplitude ripple
+        let minIdx = 0;
+        for (let r = 1; r < MAX_RIPPLES; r++) {
+          if (ripples[r].amp < ripples[minIdx].amp) minIdx = r;
+        }
+        ripples[minIdx].x = clickX; ripples[minIdx].t = 0; ripples[minIdx].amp = 1; ripples[minIdx].alive = true;
+      });
+    }
 
     // Pause RAF when scrolled off-screen
     const io = new IntersectionObserver(([entry]) => {
@@ -185,7 +299,6 @@
     }
 
     _cleanup = cleanup;
-    document.addEventListener('astro:before-swap', cleanup, { once: true });
   }
 
   document.addEventListener('astro:page-load', initWaveViz);
