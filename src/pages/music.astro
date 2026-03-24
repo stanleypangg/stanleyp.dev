@@ -1,6 +1,41 @@
 ---
+export const prerender = false;
+
 import Layout from '../layouts/Layout.astro';
+import { getTopArtists, getTopAlbums, getTopTracks, getRecentTracks } from '../lib/lastfm';
+import { esc, formatPlaycount, formatTimestamp } from '../lib/music-utils';
+
 const lfmUser = import.meta.env.PUBLIC_LASTFM_USERNAME;
+const lfmKey  = import.meta.env.PUBLIC_LASTFM_API_KEY;
+
+// Fetch all default (7-day) data in parallel on the server
+const [artistsRes, albumsRes, topTracksRes, recentTracksRes] = await Promise.allSettled([
+  getTopArtists('7day', 10, lfmKey, lfmUser),
+  getTopAlbums('7day', 10, lfmKey, lfmUser),
+  getTopTracks('7day', 10, lfmKey, lfmUser),
+  getRecentTracks(10, lfmKey, lfmUser),
+]);
+
+const artists     = artistsRes.status     === 'fulfilled' ? artistsRes.value     : [];
+const albums      = albumsRes.status      === 'fulfilled' ? albumsRes.value      : [];
+const topTracks   = topTracksRes.status   === 'fulfilled' ? topTracksRes.value   : [];
+const recentTracks = recentTracksRes.status === 'fulfilled' ? recentTracksRes.value : [];
+
+// Resolve artist images server-side via the CDN-cached /api/artist-images endpoint.
+// This eliminates the client-side waterfall — images arrive in the initial HTML.
+// The API has s-maxage=3600 (1hr), so most SSR invocations hit a warm CDN cache.
+type ArtistImageMap = Record<string, { imageUrl: string | null; spotifyUrl: string | null }>;
+let artistImages: ArtistImageMap = {};
+if (artists.length > 0) {
+  try {
+    const params = new URLSearchParams(artists.map((a) => ['names', a.name]));
+    const res = await fetch(`${import.meta.env.SITE}/api/artist-images?${params}`);
+    if (res.ok) artistImages = await res.json() as ArtistImageMap;
+  } catch { /* non-critical — client will retry */ }
+}
+
+// Cache at the Vercel edge for 5 min; browser for 1 min; serve stale up to 10 more min while revalidating
+Astro.response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=600');
 ---
 
 <Layout title="Listening — Stanley Pang" description="Music I've been listening to.">
@@ -19,8 +54,9 @@ const lfmUser = import.meta.env.PUBLIC_LASTFM_USERNAME;
   <!-- Controls: period + view toggle -->
   <div class="toggle controls-row" role="group" aria-label="Controls">
     <div class="period-group" role="group" aria-label="Time period">
-      <button class="toggle-btn active" data-period="7day">7 days</button>
-      <button class="toggle-btn" data-period="1month">1 month</button>
+      <button class="toggle-btn active" data-period="7day">7d</button>
+      <button class="toggle-btn" data-period="1month">1m</button>
+      <button class="toggle-btn" data-period="12month">1y</button>
       <button class="toggle-btn" data-period="overall">all time</button>
     </div>
     <div class="view-group" role="group" aria-label="View mode">
@@ -35,9 +71,14 @@ const lfmUser = import.meta.env.PUBLIC_LASTFM_USERNAME;
   <section id="section-artists">
     <span class="label">Top artists</span>
     <div class="grid" id="artists-grid">
-      {Array.from({ length: 10 }).map(() => (
-        <div class="grid-item skeleton" />
-      ))}
+      {artists.length > 0 ? artists.map((a, i) => {
+        const data = artistImages[a.name];
+        const href = data?.spotifyUrl ?? a.url;
+        const imgEl = data?.imageUrl
+          ? `<img src="${esc(data.imageUrl)}" alt="${esc(a.name)}" width="300" height="300" loading="${i < 3 ? 'eager' : 'lazy'}" decoding="${i < 3 ? 'auto' : 'async'}" fetchpriority="${i < 3 ? 'high' : 'auto'}" class="img-loaded" />`
+          : `<div class="img-placeholder" aria-hidden="true"></div>`;
+        return <div class="grid-item" set:html={`<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">${imgEl}<div class="item-overlay"><span class="item-name">${esc(a.name)}</span><span class="item-meta">${formatPlaycount(a.playcount)}</span></div></a>`} />;
+      }) : Array.from({ length: 10 }).map(() => <div class="grid-item skeleton" />)}
     </div>
   </section>
 
@@ -47,9 +88,12 @@ const lfmUser = import.meta.env.PUBLIC_LASTFM_USERNAME;
   <section id="section-albums">
     <span class="label">Top albums</span>
     <div class="grid" id="albums-grid">
-      {Array.from({ length: 10 }).map(() => (
-        <div class="grid-item skeleton" />
-      ))}
+      {albums.length > 0 ? albums.map((a, i) => {
+        const imgEl = a.imageUrl
+          ? `<img src="${esc(a.imageUrl)}" alt="${esc(a.name)}" width="300" height="300" loading="${i < 5 ? 'eager' : 'lazy'}" decoding="${i < 5 ? 'auto' : 'async'}" fetchpriority="${i < 5 ? 'high' : 'auto'}" class="img-loaded" />`
+          : `<div class="img-placeholder" aria-hidden="true"></div>`;
+        return <div class="grid-item" set:html={`<a href="${esc(a.url)}" target="_blank" rel="noopener noreferrer">${imgEl}<div class="item-overlay"><span class="item-name">${esc(a.name)}</span><span class="item-meta">${esc(a.artist)} · ${formatPlaycount(a.playcount)}</span></div></a>`} />;
+      }) : Array.from({ length: 10 }).map(() => <div class="grid-item skeleton" />)}
     </div>
   </section>
 
@@ -59,9 +103,9 @@ const lfmUser = import.meta.env.PUBLIC_LASTFM_USERNAME;
   <section id="section-top-tracks">
     <span class="label">Top tracks</span>
     <div class="track-list" id="top-tracks-list">
-      {Array.from({ length: 10 }).map(() => (
-        <div class="entry skeleton-row" />
-      ))}
+      {topTracks.length > 0 ? topTracks.map((t, i) => (
+        <div class="entry entry--ranked" set:html={`<span class="entry-rank" aria-hidden="true">${String(i + 1).padStart(2, '0')}</span><span class="entry-title"><a href="${esc(t.url)}" target="_blank" rel="noopener noreferrer" class="link">${esc(t.name)}</a><span class="entry-sub"> · ${esc(t.artist)}</span></span><span class="entry-meta">${formatPlaycount(t.playcount)}</span>`} />
+      )) : Array.from({ length: 10 }).map(() => <div class="entry skeleton-row" />)}
     </div>
   </section>
 
@@ -71,11 +115,27 @@ const lfmUser = import.meta.env.PUBLIC_LASTFM_USERNAME;
   <section id="section-tracks">
     <span class="label">Recent tracks</span>
     <div class="track-list" id="track-list">
-      {Array.from({ length: 10 }).map(() => (
-        <div class="entry skeleton-row" />
-      ))}
+      {recentTracks.length > 0 ? recentTracks.map((t) => {
+        const isNow = t.timestamp === null;
+        const metaEl = isNow
+          ? `<span class="track-live-wave" aria-label="Now playing"><span class="track-live-bar"></span><span class="track-live-bar"></span><span class="track-live-bar"></span><span class="track-live-bar"></span></span>`
+          : `<span class="entry-meta">${formatTimestamp(t.timestamp)}</span>`;
+        return <div class="entry" set:html={`<span class="entry-title"><a href="${esc(t.url)}" target="_blank" rel="noopener noreferrer" class="link">${esc(t.name)}</a><span class="entry-sub"> · ${esc(t.artist)}</span></span>${metaEl}`} />;
+      }) : Array.from({ length: 10 }).map(() => <div class="entry skeleton-row" />)}
     </div>
   </section>
+
+  <!-- SSR data island: client JS reads this to hydrate in-memory state without refetching -->
+  {artists.length > 0 && (
+    <script id="ssr-music-data" type="application/json" set:html={JSON.stringify({
+      period: '7day',
+      artists,
+      albums,
+      topTracks,
+      recentTracks,
+      artistImages,
+    })} />
+  )}
 
 <script is:inline data-astro-rerun>
   // Restore last rendered HTML synchronously — runs before the deferred module
@@ -84,26 +144,49 @@ const lfmUser = import.meta.env.PUBLIC_LASTFM_USERNAME;
     try {
       var period = localStorage.getItem('music_last_period') || '7day';
 
-      var artistsHtml   = localStorage.getItem('music_ui_artists_' + period);
-      var albumsHtml    = localStorage.getItem('music_ui_albums_'  + period);
-      var topTracksHtml = localStorage.getItem('music_ui_toptracks_' + period);
-      var tracksHtml    = localStorage.getItem('music_ui_tracks');
-
       var artistsEl   = document.getElementById('artists-grid');
       var albumsEl    = document.getElementById('albums-grid');
       var topTracksEl = document.getElementById('top-tracks-list');
       var tracksEl    = document.getElementById('track-list');
 
-      if (artistsEl   && artistsHtml)   artistsEl.innerHTML   = artistsHtml;
-      if (albumsEl    && albumsHtml)     albumsEl.innerHTML    = albumsHtml;
-      if (topTracksEl && topTracksHtml)  topTracksEl.innerHTML = topTracksHtml;
-      if (tracksEl    && tracksHtml)     tracksEl.innerHTML    = tracksHtml;
+      // SSR already rendered real content for 7day — don't overwrite with stale cache
+      var ssrRendered = artistsEl && !artistsEl.querySelector('.skeleton');
 
-      // Restore period toggle active state
-      if (period !== '7day') {
-        document.querySelectorAll('[data-period]').forEach(function (b) {
-          b.classList.toggle('active', b.getAttribute('data-period') === period);
-        });
+      if (ssrRendered && period === '7day') {
+        // Perfect match: SSR content is correct, nothing to restore
+      } else if (ssrRendered && period !== '7day') {
+        // User's preferred period differs — restore their cached HTML if available
+        var artistsHtml   = localStorage.getItem('music_ui_artists_'   + period);
+        var albumsHtml    = localStorage.getItem('music_ui_albums_'    + period);
+        var topTracksHtml = localStorage.getItem('music_ui_toptracks_' + period);
+        if (artistsHtml && albumsEl && topTracksEl) {
+          artistsEl.innerHTML   = artistsHtml;
+          albumsEl.innerHTML    = albumsHtml || '';
+          topTracksEl.innerHTML = topTracksHtml || '';
+          document.querySelectorAll('[data-period]').forEach(function (b) {
+            b.classList.toggle('active', b.getAttribute('data-period') === period);
+          });
+        }
+        // If no cached HTML for their period, keep SSR 7day — module script will fetch
+      } else {
+        // SSR failed (skeletons) — restore from localStorage as usual
+        var artistsHtml   = localStorage.getItem('music_ui_artists_'   + period);
+        var albumsHtml    = localStorage.getItem('music_ui_albums_'    + period);
+        var topTracksHtml = localStorage.getItem('music_ui_toptracks_' + period);
+        if (artistsEl   && artistsHtml)   artistsEl.innerHTML   = artistsHtml;
+        if (albumsEl    && albumsHtml)     albumsEl.innerHTML    = albumsHtml;
+        if (topTracksEl && topTracksHtml)  topTracksEl.innerHTML = topTracksHtml;
+        if (period !== '7day') {
+          document.querySelectorAll('[data-period]').forEach(function (b) {
+            b.classList.toggle('active', b.getAttribute('data-period') === period);
+          });
+        }
+      }
+
+      // Recent tracks: only restore from cache if SSR didn't render them
+      var tracksHtml = localStorage.getItem('music_ui_tracks');
+      if (tracksEl && tracksHtml && tracksEl.querySelector('.skeleton-row')) {
+        tracksEl.innerHTML = tracksHtml;
       }
     } catch (_) { /* localStorage unavailable */ }
   })();
@@ -150,14 +233,15 @@ const lfmUser = import.meta.env.PUBLIC_LASTFM_USERNAME;
   }
 
   // ── Render helpers ────────────────────────────────────────────────────────
-  function renderArtists(artists: ArtistStat[], images: Map<string, ArtistData>) {
+  function renderArtists(artists: ArtistStat[], images: Map<string, ArtistData>, animate = true) {
     const grid = document.getElementById('artists-grid')!;
     grid.classList.remove('chart-view');
-    grid.innerHTML = artists.map((a) => {
+    grid.innerHTML = artists.map((a, i) => {
       const data = images.get(a.name);
+      const animStyle = animate ? `animation-delay:${i * 50}ms` : `animation:none`;
       const imgEl = data?.imageUrl
-        ? `<img src="${esc(data.imageUrl)}" alt="${esc(a.name)}" loading="lazy" />`
-        : `<div class="img-placeholder" aria-hidden="true"></div>`;
+        ? `<img src="${esc(data.imageUrl)}" alt="${esc(a.name)}" loading="lazy" decoding="async" style="${animStyle}" />`
+        : `<div class="img-placeholder" aria-hidden="true" style="${animStyle}"></div>`;
       const href = data?.spotifyUrl ?? a.url;
       return `
         <div class="grid-item">
@@ -172,13 +256,14 @@ const lfmUser = import.meta.env.PUBLIC_LASTFM_USERNAME;
     }).join('');
   }
 
-  function renderAlbums(albums: AlbumStat[]) {
+  function renderAlbums(albums: AlbumStat[], animate = true) {
     const grid = document.getElementById('albums-grid')!;
     grid.classList.remove('chart-view');
-    grid.innerHTML = albums.map((a) => {
+    grid.innerHTML = albums.map((a, i) => {
+      const animStyle = animate ? `animation-delay:${i * 50}ms` : `animation:none`;
       const imgEl = a.imageUrl
-        ? `<img src="${esc(a.imageUrl)}" alt="${esc(a.name)}" loading="lazy" />`
-        : `<div class="img-placeholder" aria-hidden="true"></div>`;
+        ? `<img src="${esc(a.imageUrl)}" alt="${esc(a.name)}" loading="lazy" decoding="async" style="${animStyle}" />`
+        : `<div class="img-placeholder" aria-hidden="true" style="${animStyle}"></div>`;
       return `
         <div class="grid-item">
           <a href="${esc(a.url)}" target="_blank" rel="noopener noreferrer">
@@ -321,9 +406,9 @@ const lfmUser = import.meta.env.PUBLIC_LASTFM_USERNAME;
   let lastAlbums:    AlbumStat[]  = [];
   let lastTopTracks: TrackStat[]  = [];
 
-  async function loadPeriodData(period: Period) {
+  async function loadPeriodData(period: Period, forceRender = false) {
     // Serve from cache immediately if fresh
-    const cacheKey = `music_period_v3_${period}`;
+    const cacheKey = `music_period_v4_${period}`;
     const cached = cacheGet<PeriodData>(cacheKey, TTL.period);
     if (cached) {
       lastArtists   = cached.artists;
@@ -334,15 +419,14 @@ const lfmUser = import.meta.env.PUBLIC_LASTFM_USERNAME;
         renderArtistsChart(cached.artists);
         renderAlbumsChart(cached.albums);
       } else {
-        // Skip re-render if the inline script already restored cached HTML into the DOM.
-        // Checking the DOM (not localStorage) is the source of truth — localStorage
-        // keys persist across navigations even when the DOM still has skeleton placeholders.
+        // Skip re-render if the inline script already restored cached HTML into the DOM
+        // (initial load only — period toggles always force a render).
         const artistsGrid = document.getElementById('artists-grid');
-        const htmlAlreadyRestored = artistsGrid && !artistsGrid.querySelector('.skeleton');
+        const htmlAlreadyRestored = !forceRender && artistsGrid && !artistsGrid.querySelector('.skeleton');
         if (!htmlAlreadyRestored) {
-          renderArtists(cached.artists, new Map(Object.entries(cached.images)));
+          renderArtists(cached.artists, new Map(Object.entries(cached.images)), !forceRender);
           saveGridHtml('artists', period);
-          renderAlbums(cached.albums);
+          renderAlbums(cached.albums, !forceRender);
           saveGridHtml('albums', period);
         }
         if (cached.topTracks) {
@@ -365,7 +449,7 @@ const lfmUser = import.meta.env.PUBLIC_LASTFM_USERNAME;
       if (viewMode === 'chart') {
         renderAlbumsChart(albumsResult.value);
       } else {
-        renderAlbums(albumsResult.value);
+        renderAlbums(albumsResult.value, !forceRender);
         saveGridHtml('albums', period);
       }
     } else {
@@ -387,8 +471,11 @@ const lfmUser = import.meta.env.PUBLIC_LASTFM_USERNAME;
       // The server caches results at the CDN layer (s-maxage=3600).
       let images: Record<string, ArtistData> = {};
       try {
-        const params = new URLSearchParams(artists.map((a) => ['names', a.name] as [string, string]));
-        const res = await fetch(`/api/artist-images?${params}`);
+        const imgController = new AbortController();
+        const imgTimeout = setTimeout(() => imgController.abort(), 10000);
+        const params = new URLSearchParams(artists.map((a) => ['names', a.name]));
+        const res = await fetch(`/api/artist-images?${params}`, { signal: imgController.signal });
+        clearTimeout(imgTimeout);
         if (res.ok) images = await res.json() as Record<string, ArtistData>;
       } catch { /* images are non-critical */ }
 
@@ -398,7 +485,7 @@ const lfmUser = import.meta.env.PUBLIC_LASTFM_USERNAME;
       if (viewMode === 'chart') {
         renderArtistsChart(artists);
       } else {
-        renderArtists(artists, new Map(Object.entries(images)));
+        renderArtists(artists, new Map(Object.entries(images)), !forceRender);
         saveGridHtml('artists', period);
       }
 
@@ -453,31 +540,7 @@ const lfmUser = import.meta.env.PUBLIC_LASTFM_USERNAME;
         document.querySelectorAll('[data-period]').forEach((b) => b.classList.remove('active'));
         btn.classList.add('active');
 
-        const artistsGrid = document.getElementById('artists-grid')!;
-        const albumsGrid = document.getElementById('albums-grid')!;
-        if (viewMode === 'chart') {
-          const skeletonHeights = [100, 78, 65, 55, 47, 40, 34, 29, 25, 21];
-          const vchartSkeleton = `<div class="vchart">${skeletonHeights.map((h) => `
-            <div class="vchart-col">
-              <span class="vchart-count" style="width:1.5rem;height:0.6rem;background:var(--subtle);border-radius:2px;display:block"></span>
-              <div class="vchart-bar-area">
-                <div class="vchart-bar" style="height:${h}%;background:var(--subtle);transform:scaleY(1);transition:none"></div>
-              </div>
-              <div class="vchart-img" style="background:var(--subtle)"></div>
-              <span class="vchart-name" style="width:70%;height:0.5rem;background:var(--subtle);border-radius:2px;display:block"></span>
-            </div>`).join('')}</div>`;
-          artistsGrid.classList.add('chart-view');
-          artistsGrid.innerHTML = vchartSkeleton;
-          albumsGrid.classList.add('chart-view');
-          albumsGrid.innerHTML = vchartSkeleton;
-        } else {
-          artistsGrid.innerHTML = Array.from({ length: 10 }, () => '<div class="grid-item skeleton"></div>').join('');
-          albumsGrid.innerHTML  = Array.from({ length: 10 }, () => '<div class="grid-item skeleton"></div>').join('');
-          const topTracksList = document.getElementById('top-tracks-list')!;
-          topTracksList.innerHTML = Array.from({ length: 10 }, () => '<div class="entry skeleton-row"></div>').join('');
-        }
-
-        await loadPeriodData(period);
+        await loadPeriodData(period, true);
       });
     });
 
@@ -503,11 +566,79 @@ const lfmUser = import.meta.env.PUBLIC_LASTFM_USERNAME;
       });
     });
 
+    // ── SSR data hydration ─────────────────────────────────────────────────
+    // The server embeds a JSON island with the default 7day data. Read it once
+    // to populate in-memory state and seed localStorage caches — no fetch needed.
+    const ssrEl = document.getElementById('ssr-music-data');
+    let ssrData: {
+      period: string;
+      artists: ArtistStat[];
+      albums: AlbumStat[];
+      topTracks: TrackStat[];
+      recentTracks: Track[];
+      artistImages?: Record<string, ArtistData>;
+    } | null = null;
+    if (ssrEl) {
+      try { ssrData = JSON.parse(ssrEl.textContent ?? ''); } catch { /* malformed */ }
+    }
+
+    // Seed recent tracks cache from SSR data (images seeded after async fetch below)
+    if (ssrData) {
+      if (ssrData.recentTracks.length > 0 && !cacheGet('music_tracks', TTL.tracks)) {
+        cacheSet('music_tracks', ssrData.recentTracks);
+      }
+    }
+
     // ── Load data ──────────────────────────────────────────────────────────
-    await Promise.allSettled([
-      loadPeriodData(currentPeriod),
-      loadStaticData(),
-    ]);
+    if (ssrData && currentPeriod === ssrData.period) {
+      // SSR rendered the correct period — populate state from data island
+      lastArtists   = ssrData.artists;
+      lastAlbums    = ssrData.albums;
+      lastTopTracks = ssrData.topTracks;
+      saveGridHtml('albums', currentPeriod);
+      saveTopTracksHtml(currentPeriod);
+      saveTracksHtml();
+
+      const ssrImages = ssrData.artistImages ?? {};
+      if (Object.keys(ssrImages).length > 0) {
+        // SSR resolved images — seed cache immediately, no client fetch needed
+        lastImages = ssrImages;
+        saveGridHtml('artists', currentPeriod);
+        cacheSet<PeriodData>(`music_period_v4_${currentPeriod}`, {
+          artists: lastArtists, albums: lastAlbums,
+          images: ssrImages, topTracks: lastTopTracks,
+        });
+      } else if (ssrData.artists.length > 0) {
+        // SSR didn't resolve images (cold start failure) — fetch client-side as fallback
+        lastImages = {};
+        const params = new URLSearchParams(ssrData.artists.map((a) => ['names', a.name]));
+        fetch(`/api/artist-images?${params}`)
+          .then((r) => r.ok ? r.json() as Promise<Record<string, ArtistData>> : Promise.resolve({} as Record<string, ArtistData>))
+          .then((images) => {
+            lastImages = images;
+            if (viewMode === 'grid') {
+              renderArtists(lastArtists, new Map(Object.entries(images)));
+            } else {
+              renderArtistsChart(lastArtists);
+            }
+            saveGridHtml('artists', currentPeriod);
+            cacheSet<PeriodData>(`music_period_v4_${currentPeriod}`, {
+              artists: lastArtists, albums: lastAlbums,
+              images, topTracks: lastTopTracks,
+            });
+          })
+          .catch(() => { saveGridHtml('artists', currentPeriod); });
+      } else {
+        lastImages = {};
+        saveGridHtml('artists', currentPeriod);
+      }
+    } else {
+      // Period mismatch or SSR failed — fetch client-side as before
+      await Promise.allSettled([
+        loadPeriodData(currentPeriod),
+        loadStaticData(),
+      ]);
+    }
   }
 
   // astro:page-load fires on first load AND after every View Transition.
@@ -604,21 +735,34 @@ const lfmUser = import.meta.env.PUBLIC_LASTFM_USERNAME;
     text-decoration: none;
   }
 
+  :global(.grid-item) {
+    background: var(--subtle);
+  }
+
   :global(.grid-item img),
   :global(.grid-item .img-placeholder) {
     width: 100%;
     height: 100%;
     object-fit: cover;
     display: block;
-    transition: transform 400ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  :global(.grid-item img),
+  :global(.grid-item .img-placeholder) {
+    animation: img-pop-in 500ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  }
+
+  :global(.grid-item img) {
+    transition: transform 500ms cubic-bezier(0.25, 1, 0.5, 1);
   }
 
   :global(.grid-item:hover img) {
-    transform: scale(1.04);
+    transform: scale(1.02);
   }
 
-  :global(.img-placeholder) {
-    background: var(--subtle);
+  @keyframes img-pop-in {
+    from { opacity: 0; transform: scale(1.06); }
+    to   { opacity: 1; transform: scale(1); }
   }
 
   :global(.item-overlay) {
@@ -683,6 +827,9 @@ const lfmUser = import.meta.env.PUBLIC_LASTFM_USERNAME;
   @media (prefers-reduced-motion: reduce) {
     :global(.grid-item.skeleton),
     .skeleton-row { animation: none; }
+
+    :global(.grid-item img),
+    :global(.grid-item .img-placeholder) { animation: none; opacity: 1; }
   }
 
   /* Error state */
