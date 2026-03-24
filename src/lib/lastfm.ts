@@ -1,4 +1,4 @@
-export type Period = '7day' | '1month' | 'overall';
+export type Period = '7day' | '1month' | '12month' | 'overall';
 
 export interface ArtistStat {
   name: string;
@@ -43,9 +43,15 @@ function buildUrl(params: Record<string, string>): string {
 }
 
 async function get<T>(params: Record<string, string>): Promise<T> {
-  const res = await fetch(buildUrl(params));
-  if (!res.ok) throw new Error(`Last.fm ${params.method} failed: ${res.status}`);
-  return res.json() as Promise<T>;
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch(buildUrl(params), { signal: controller.signal });
+    if (!res.ok) throw new Error(`Last.fm ${params.method} failed: ${res.status}`);
+    return res.json() as Promise<T>;
+  } finally {
+    clearTimeout(id);
+  }
 }
 
 export async function getTopArtists(

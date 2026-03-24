@@ -1,3 +1,29 @@
+export async function getClientToken(
+  clientId: string,
+  clientSecret: string,
+): Promise<string | null> {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), 5000);
+  try {
+    const res = await fetch('https://accounts.spotify.com/api/token', {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({ grant_type: 'client_credentials' }),
+      signal: controller.signal,
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return (data.access_token as string) ?? null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(id);
+  }
+}
+
 interface SpotifyImage {
   url: string;
   width: number | null;
@@ -16,9 +42,12 @@ export async function getArtistData(
   const encoded = encodeURIComponent(artistName);
   const url = `https://api.spotify.com/v1/search?q=${encoded}&type=artist&limit=1`;
 
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), 5000);
   try {
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${accessToken}` },
+      signal: controller.signal,
     });
 
     if (!res.ok) return { imageUrl: null, spotifyUrl: null };
@@ -39,5 +68,7 @@ export async function getArtistData(
     return { imageUrl: (target ?? sorted[sorted.length - 1]).url, spotifyUrl };
   } catch {
     return { imageUrl: null, spotifyUrl: null };
+  } finally {
+    clearTimeout(id);
   }
 }
