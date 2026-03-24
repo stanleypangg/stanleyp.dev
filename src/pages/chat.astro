@@ -56,7 +56,9 @@ import Layout from '../layouts/Layout.astro';
   let channel: RealtimeChannel | null = null;
 
   function formatTime(iso: string): string {
-    return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const d = new Date(iso);
+    return d.toLocaleDateString([], { month: 'short', day: 'numeric' })
+      + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
 
   function renderMessage(msg: ChatMessage, isNew = false): string {
@@ -90,7 +92,13 @@ import Layout from '../layouts/Layout.astro';
     } catch {}
 
     // Loading state
-    feed.innerHTML = '<div class="chat-spinner" aria-label="Loading"></div>';
+    feed.innerHTML = `<div class="chat-skeleton" role="status" aria-label="Loading messages">
+      <div class="chat-skeleton-line"><span class="chat-skeleton-time-bar"></span><span class="chat-skeleton-name-bar"></span><span class="chat-skeleton-text-bar" style="width:62%"></span></div>
+      <div class="chat-skeleton-line"><span class="chat-skeleton-time-bar"></span><span class="chat-skeleton-name-bar" style="width:3.8rem"></span><span class="chat-skeleton-text-bar" style="width:41%"></span></div>
+      <div class="chat-skeleton-line"><span class="chat-skeleton-time-bar"></span><span class="chat-skeleton-name-bar"></span><span class="chat-skeleton-text-bar" style="width:55%"></span></div>
+      <div class="chat-skeleton-line"><span class="chat-skeleton-time-bar"></span><span class="chat-skeleton-name-bar" style="width:3.2rem"></span><span class="chat-skeleton-text-bar" style="width:35%"></span></div>
+      <div class="chat-skeleton-line"><span class="chat-skeleton-time-bar"></span><span class="chat-skeleton-name-bar"></span><span class="chat-skeleton-text-bar" style="width:48%"></span></div>
+    </div>`;
 
     const supabase = createBrowserClient();
 
@@ -270,7 +278,7 @@ import Layout from '../layouts/Layout.astro';
     color: var(--subtle);
     font-size: var(--text-2xs);
     font-variant-numeric: tabular-nums;
-    width: 4.5rem;
+    width: 7.5rem;
     flex-shrink: 0;
   }
 
@@ -301,23 +309,54 @@ import Layout from '../layouts/Layout.astro';
     font-weight: 300;
   }
 
-  .chat-spinner {
-    width: 20px;
-    height: 20px;
-    border: 1.5px solid var(--border);
-    border-top-color: var(--muted);
-    border-radius: 50%;
-    animation: spin 700ms linear infinite;
-    margin: auto;
-    align-self: center;
+  /* ── Skeleton loader ───────────────────────────────────── */
+  :global(.chat-skeleton) {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    width: 100%;
+    padding: 0.1rem 0;
   }
 
-  @keyframes spin {
-    to { rotate: 360deg; }
+  :global(.chat-skeleton-line) {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    min-height: 1.3rem;
+    animation: skeleton-pulse 2s ease-in-out infinite;
   }
 
-  @media (prefers-reduced-motion: reduce) {
-    .chat-spinner { animation: none; opacity: 0.4; }
+  :global(.chat-skeleton-line:nth-child(1)) { animation-delay: 0s; }
+  :global(.chat-skeleton-line:nth-child(2)) { animation-delay: 0.22s; }
+  :global(.chat-skeleton-line:nth-child(3)) { animation-delay: 0.44s; }
+  :global(.chat-skeleton-line:nth-child(4)) { animation-delay: 0.66s; }
+  :global(.chat-skeleton-line:nth-child(5)) { animation-delay: 0.88s; }
+
+  :global(.chat-skeleton-time-bar) {
+    height: 7px;
+    width: 7.5rem;
+    flex-shrink: 0;
+    background: var(--border);
+    border-radius: 1px;
+  }
+
+  :global(.chat-skeleton-name-bar) {
+    height: 9px;
+    width: 5rem;
+    flex-shrink: 0;
+    background: var(--border);
+    border-radius: 1px;
+  }
+
+  :global(.chat-skeleton-text-bar) {
+    height: 9px;
+    background: var(--border);
+    border-radius: 1px;
+  }
+
+  @keyframes skeleton-pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.25; }
   }
 
   /* ── Form ──────────────────────────────────────────────── */
@@ -443,6 +482,10 @@ import Layout from '../layouts/Layout.astro';
     }
     :global(.chat-line--new) {
       animation: none;
+    }
+    :global(.chat-skeleton-line) {
+      animation: none;
+      opacity: 0.35;
     }
     .chat-input,
     .chat-send {
