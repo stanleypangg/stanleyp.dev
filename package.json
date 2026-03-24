@@ -12,16 +12,22 @@
   },
   "dependencies": {
     "@astrojs/mdx": "^5.0.2",
+    "@astrojs/sitemap": "^3.7.1",
     "@astrojs/vercel": "^9.0.5",
+    "@supabase/realtime-js": "^2.100.0",
     "@supabase/supabase-js": "^2.99.3",
     "astro": "^5.0.0",
     "leo-profanity": "^1.9.0",
     "tslib": "^2.8.1"
   },
   "devDependencies": {
+    "svgo": "^4.0.1",
     "vitest": "^4.1.0"
   },
   "pnpm": {
+    "overrides": {
+      "path-to-regexp": "^8.0.0"
+    },
     "onlyBuiltDependencies": [
       "esbuild",
       "sharp"
