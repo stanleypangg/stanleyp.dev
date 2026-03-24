@@ -115,10 +115,7 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
     row-gap: 0;
     list-style: none;
     cursor: grab;
-    /* expand grid box 8px in all directions for shadow room, then clip */
-    margin: calc(-1rem - 8px) -8px -8px;
-    padding: 8px;
-    overflow: clip;
+    margin-top: -1rem;
   }
 
   .photo-grid.is-dragging {
@@ -126,8 +123,20 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
   }
 
   .photo-item {
+    box-sizing: border-box;
+    padding-block: 0;
     opacity: 0;
     transition: opacity 400ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .photo-item.is-left-column {
+    padding-left: 5px;
+    padding-right: 0;
+  }
+
+  .photo-item.is-right-column {
+    padding-left: 0;
+    padding-right: 5px;
   }
 
   .photo-item.is-ready {
@@ -172,15 +181,20 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
     align-items: center;
     justify-content: center;
     pointer-events: none;
+    will-change: transform;
+    backface-visibility: hidden;
   }
 
   .lb-adj-img {
-    max-width: min(90vw, 1100px);
+    width: min(90vw, 1100px);
     height: 70dvh;
     object-fit: contain;
+    object-position: top center;
     border-radius: 4px;
     display: block;
     user-select: none;
+    will-change: transform;
+    backface-visibility: hidden;
   }
 
   /* ── Lightbox ─────────────────────────────────────────────── */
@@ -228,7 +242,7 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
   }
 
   .lightbox-img {
-    max-width: 100%;
+    width: min(90vw, 1100px);
     height: 70dvh;
     object-fit: contain;
     object-position: top center;
@@ -237,6 +251,12 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
     display: block;
     cursor: grab;
     user-select: none;
+    will-change: transform, opacity;
+    backface-visibility: hidden;
+  }
+
+  .lightbox-img.is-loading {
+    opacity: 0;
   }
 
   @keyframes lb-out-left {
@@ -376,16 +396,21 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
   const GAP = 8; // px between items vertically
 
   function measureHeight(item: HTMLElement): number {
-    // Read-only: returns the height without touching the DOM
+    const wrap = item.querySelector<HTMLElement>('.photo-wrap');
     const img = item.querySelector<HTMLImageElement>('img');
-    if (!img) return 0;
-    let h = img.getBoundingClientRect().height;
-    if (h === 0) {
-      // Estimate from declared aspect ratio before image loads
+    if (!wrap || !img) return 0;
+
+    const styles = window.getComputedStyle(item);
+    const padTop = parseFloat(styles.paddingTop) || 0;
+    const padBottom = parseFloat(styles.paddingBottom) || 0;
+
+    let h = wrap.getBoundingClientRect().height + padTop + padBottom;
+    if (h === padTop + padBottom) {
+      // Estimate from declared aspect ratio before image loads.
       const aw = Number(img.getAttribute('width'));
       const ah = Number(img.getAttribute('height'));
       const w = img.getBoundingClientRect().width;
-      if (aw && ah && w > 0) h = w * (ah / aw);
+      if (aw && ah && w > 0) h = w * (ah / aw) + padTop + padBottom;
     }
     return h;
   }
@@ -405,12 +430,29 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
     });
   }
 
+  function updateOuterPadding() {
+    const grid = document.querySelector<HTMLElement>('.photo-grid');
+    if (!grid) return;
+
+    const gridMidX = grid.getBoundingClientRect().left + (grid.getBoundingClientRect().width / 2);
+    const items = Array.from(grid.querySelectorAll<HTMLElement>('.photo-item'));
+
+    items.forEach((item) => {
+      const rect = item.getBoundingClientRect();
+      const itemMidX = rect.left + (rect.width / 2);
+      const isLeft = itemMidX < gridMidX;
+      item.classList.toggle('is-left-column', isLeft);
+      item.classList.toggle('is-right-column', !isLeft);
+    });
+  }
+
   // ── Lightbox state ────────────────────────────────────────────
   type Photo = { src: string; alt: string; date: string; caption?: string };
   let currentIndex = 0;
   let lightboxPhotos: Photo[] = [];
   let lbController: AbortController | null = null;
   let savedFocus: HTMLElement | null = null;
+  let lightboxImageToken = 0;
 
   function getPhotos(): Photo[] {
     const el = document.getElementById('photo-data');
@@ -418,13 +460,37 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
     try { return JSON.parse(el.textContent || '[]'); } catch { return []; }
   }
 
-  function updateLightbox() {
+  function updateLightbox(options: { hideUntilLoaded?: boolean } = {}) {
     const photo = lightboxPhotos[currentIndex];
     if (!photo) return;
     const img = document.querySelector<HTMLImageElement>('.lightbox-img');
     const counter = document.querySelector<HTMLElement>('.lightbox-counter');
     const caption = document.querySelector<HTMLElement>('.lightbox-caption');
-    if (img) { img.src = photo.src; img.alt = photo.alt; }
+    const hideUntilLoaded = options.hideUntilLoaded === true;
+    if (img) {
+      const token = ++lightboxImageToken;
+      const reveal = () => {
+        if (token !== lightboxImageToken) return;
+        img.classList.remove('is-loading');
+      };
+
+      if (hideUntilLoaded) {
+        img.classList.add('is-loading');
+        img.removeAttribute('src');
+      }
+
+      img.alt = photo.alt;
+      img.src = photo.src;
+
+      if (hideUntilLoaded) {
+        if (img.complete) {
+          requestAnimationFrame(reveal);
+        } else {
+          img.addEventListener('load', reveal, { once: true });
+          img.addEventListener('error', reveal, { once: true });
+        }
+      }
+    }
     if (counter) counter.textContent = `${currentIndex + 1} / ${lightboxPhotos.length}`;
     if (caption) caption.textContent = photo.caption || '';
   }
@@ -435,7 +501,7 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
     lightboxPhotos = getPhotos();
     if (lightboxPhotos.length === 0) return;
     currentIndex = index;
-    updateLightbox();
+    updateLightbox({ hideUntilLoaded: true });
     savedFocus = document.activeElement as HTMLElement | null;
     dialog.showModal();
     dialog.querySelector<HTMLButtonElement>('.lightbox-close')?.focus();
@@ -468,11 +534,23 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
 
     img.classList.add(outClass);
     img.addEventListener('animationend', () => {
+      img.style.opacity = '0';
       img.classList.remove(outClass);
       currentIndex = (currentIndex + delta + len) % len;
-      updateLightbox();
-      img.classList.add(inClass);
-      img.addEventListener('animationend', () => img.classList.remove(inClass), { once: true });
+      updateLightbox({ hideUntilLoaded: true });
+
+      const enter = () => {
+        img.style.opacity = '';
+        img.classList.add(inClass);
+        img.addEventListener('animationend', () => img.classList.remove(inClass), { once: true });
+      };
+
+      if (img.complete) {
+        enter();
+      } else {
+        img.addEventListener('load', enter, { once: true });
+        img.addEventListener('error', enter, { once: true });
+      }
     }, { once: true });
   }
 
@@ -485,6 +563,7 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
 
       const reveal = () => {
         spanItem(item); // re-span with actual loaded dimensions
+        updateOuterPadding();
         // 60ms stagger per row (2 columns), capped at 300ms
         item.style.transitionDelay = `${Math.min(Math.floor(i / 2) * 60, 300)}ms`;
         item.classList.add('is-ready');
@@ -640,8 +719,24 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
     let activeAdj: HTMLElement | null = null;
     const DRAG_THRESHOLD = 80;
 
+    const syncAdjacentFrame = (adjWrap: HTMLElement, sourceImg: HTMLImageElement) => {
+      const adjImg = adjWrap.querySelector<HTMLImageElement>('.lb-adj-img');
+      if (!adjImg) return;
+
+      const rect = sourceImg.getBoundingClientRect();
+      adjWrap.style.display = 'block';
+
+      adjImg.style.position = 'absolute';
+      adjImg.style.left = `${rect.left}px`;
+      adjImg.style.top = `${rect.top}px`;
+      adjImg.style.width = `${rect.width}px`;
+      adjImg.style.height = `${rect.height}px`;
+      adjImg.style.maxWidth = 'none';
+    };
+
     const hideAdj = () => {
       if (!activeAdj) return;
+      activeAdj.querySelector<HTMLElement>('.lb-adj-img')?.removeAttribute('style');
       activeAdj.style.cssText = '';
       activeAdj = null;
     };
@@ -672,17 +767,18 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
         const adjIndex = (currentIndex + sign + lightboxPhotos.length) % lightboxPhotos.length;
         activeAdj = sign === -1 ? adjPrevWrap : adjNextWrap;
         if (activeAdj) {
+          const img = dialog.querySelector<HTMLImageElement>('.lightbox-img');
           const adjImg = activeAdj.querySelector<HTMLImageElement>('.lb-adj-img');
           if (adjImg) { adjImg.src = lightboxPhotos[adjIndex].src; adjImg.alt = lightboxPhotos[adjIndex].alt; }
-          activeAdj.style.display = 'flex';
-          activeAdj.style.transform = `translateX(${adjBase}px)`;
+          if (img) syncAdjacentFrame(activeAdj, img);
+          activeAdj.style.transform = `translate3d(${adjBase}px, 0, 0)`;
         }
       }
 
       dragState.delta = dx;
       const img = dialog.querySelector<HTMLImageElement>('.lightbox-img');
-      if (img) { img.style.transition = 'none'; img.style.transform = `translateX(${dx}px)`; }
-      if (activeAdj) { activeAdj.style.transition = 'none'; activeAdj.style.transform = `translateX(${dragState.adjBase + dx}px)`; }
+      if (img) { img.style.transition = 'none'; img.style.transform = `translate3d(${dx}px, 0, 0)`; }
+      if (activeAdj) { activeAdj.style.transition = 'none'; activeAdj.style.transform = `translate3d(${dragState.adjBase + dx}px, 0, 0)`; }
     }, { signal });
 
     const releaseDrag = () => {
@@ -705,16 +801,17 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
         // Commit: slide current off, adj comes to center
         const exitX = delta > 0 ? window.innerWidth : -window.innerWidth;
         img.style.transition = `transform 200ms ${EASING}`;
-        img.style.transform = `translateX(${exitX}px)`;
+        img.style.transform = `translate3d(${exitX}px, 0, 0)`;
         activeAdj.style.transition = `transform 200ms ${EASING}`;
-        activeAdj.style.transform = `translateX(0px)`;
+        activeAdj.style.transform = 'translate3d(0, 0, 0)';
 
         const adj = activeAdj;
         img.addEventListener('transitionend', () => {
           currentIndex = (currentIndex + sign + lightboxPhotos.length) % lightboxPhotos.length;
-          updateLightbox();
+          updateLightbox({ hideUntilLoaded: true });
           img.style.transition = 'none';
           img.style.transform = '';
+          adj.querySelector<HTMLElement>('.lb-adj-img')?.removeAttribute('style');
           adj.style.cssText = '';
           if (activeAdj === adj) activeAdj = null;
         }, { once: true });
@@ -727,7 +824,7 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
         if (activeAdj) {
           const adj = activeAdj;
           adj.style.transition = `transform 280ms ${SNAP}`;
-          adj.style.transform = `translateX(${adjBase}px)`;
+          adj.style.transform = `translate3d(${adjBase}px, 0, 0)`;
           adj.addEventListener('transitionend', () => {
             adj.style.cssText = '';
             if (activeAdj === adj) activeAdj = null;
@@ -751,6 +848,9 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
   let resizeRaf = 0;
   window.addEventListener('resize', () => {
     cancelAnimationFrame(resizeRaf);
-    resizeRaf = requestAnimationFrame(spanAll);
+    resizeRaf = requestAnimationFrame(() => {
+      spanAll();
+      updateOuterPadding();
+    });
   });
 </script>
