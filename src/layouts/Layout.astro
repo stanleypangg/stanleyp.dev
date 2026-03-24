@@ -108,8 +108,8 @@ const isChat     = pathname.startsWith('/chat');
       (function () {
         if (!('startViewTransition' in document)) return;
 
-        var OUT = 160;
-        var IN  = 320;
+        var OUT = 240;
+        var IN  = 500;
         var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
         document.startViewTransition = function (callback) {
