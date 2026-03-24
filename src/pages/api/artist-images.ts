@@ -9,6 +9,13 @@ export async function GET({ url }: { url: URL }) {
     return new Response('{}', { headers: { 'Content-Type': 'application/json' } });
   }
 
+  if (names.length > 50) {
+    return new Response(JSON.stringify({ error: 'Too many names (max 50)' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   const token = await getClientToken(
     import.meta.env.SPOTIFY_CLIENT_ID,
     import.meta.env.SPOTIFY_CLIENT_SECRET,

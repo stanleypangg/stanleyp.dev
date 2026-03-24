@@ -4,7 +4,12 @@ const TOKEN_URL = 'https://accounts.spotify.com/api/token';
 const NOW_PLAYING_URL = 'https://api.spotify.com/v1/me/player/currently-playing';
 const RECENTLY_PLAYED_URL = 'https://api.spotify.com/v1/me/player/recently-played?limit=1';
 
+let cachedToken: string | null = null;
+let tokenExpiresAt = 0;
+
 async function getAccessToken(): Promise<string> {
+  if (cachedToken && Date.now() < tokenExpiresAt) return cachedToken;
+
   const clientId = import.meta.env.SPOTIFY_CLIENT_ID;
   const clientSecret = import.meta.env.SPOTIFY_CLIENT_SECRET;
   const refreshToken = import.meta.env.SPOTIFY_REFRESH_TOKEN;
@@ -26,7 +31,11 @@ async function getAccessToken(): Promise<string> {
   if (!res.ok) throw new Error(`Spotify token refresh failed: ${res.status}`);
   const data = await res.json();
   if (!data.access_token) throw new Error('Spotify token response missing access_token');
-  return data.access_token;
+
+  cachedToken = data.access_token;
+  // Spotify tokens last 3600s; refresh 60s early to avoid expiry mid-request
+  tokenExpiresAt = Date.now() + (data.expires_in ?? 3600) * 1000 - 60_000;
+  return cachedToken;
 }
 
 export async function GET() {
