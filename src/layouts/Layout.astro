@@ -179,6 +179,8 @@ const isChat     = pathname.startsWith('/chat');
         );
       })();
     </script>
+    <script data-goatcounter="https://stanleyp.goatcounter.com/count"
+            async src="//gc.zgo.at/count.js"></script>
   </head>
 
   <body>
@@ -434,35 +436,29 @@ const isChat     = pathname.startsWith('/chat');
     document.querySelector<HTMLElement>('.wave-wrap')?.style.removeProperty('opacity');
   });
 
-  // ── Visitor counter ───────────────────────────────────────
+  // ── Visitor counter (GoatCounter) ────────────────────────
   const VISITORS_KEY = 'visitor-count-cache';
-  const TRACKED_KEY = 'view-tracked';
-
-  async function postView() {
-    if (sessionStorage.getItem(TRACKED_KEY)) return;
-    try {
-      const res = await fetch('/api/views', { method: 'POST' });
-      if (res.ok) sessionStorage.setItem(TRACKED_KEY, '1');
-    } catch { /* network failure, continue */ }
-  }
 
   async function refreshCount() {
     const el = document.getElementById('visitor-count');
     if (!el) return;
     const cached = localStorage.getItem(VISITORS_KEY);
-    if (cached) el.textContent = Number(cached).toLocaleString();
+    if (cached) el.textContent = cached;
     try {
-      const res = await fetch('/api/views');
+      const res = await fetch('https://stanleyp.goatcounter.com/counter/*.json');
       if (res.ok) {
         const { count } = await res.json();
-        el.textContent = count.toLocaleString();
-        localStorage.setItem(VISITORS_KEY, String(count));
+        el.textContent = count;
+        localStorage.setItem(VISITORS_KEY, count);
       }
     } catch { /* silently fail */ }
   }
 
-  postView().then(refreshCount);
-  document.addEventListener('astro:after-swap', () => refreshCount());
+  refreshCount();
+  document.addEventListener('astro:after-swap', () => {
+    if (window.goatcounter?.count) window.goatcounter.count();
+    refreshCount();
+  });
 
   // ── Preload pictures on nav hover / touch ───────────────────────
   let picturesPreloaded = false;
