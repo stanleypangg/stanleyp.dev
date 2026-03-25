@@ -1,7 +1,8 @@
 {
   "rewrites": [
     { "source": "/gc/count.js", "destination": "https://gc.zgo.at/count.js" },
-    { "source": "/gc/count", "destination": "https://stanleyp.goatcounter.com/count" }
+    { "source": "/gc/count", "destination": "https://stanleyp.goatcounter.com/count" },
+    { "source": "/gc/counter/:path*", "destination": "https://stanleyp.goatcounter.com/counter/:path*" }
   ],
   "headers": [
     {
