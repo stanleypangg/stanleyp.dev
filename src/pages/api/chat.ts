@@ -67,7 +67,7 @@ export async function POST({ request, clientAddress }: { request: Request; clien
     return json({ error: 'Message must be 1–500 characters' }, 400);
   }
 
-  const ip = clientAddress || request.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
+  const ip = clientAddress;
   if (!ip) {
     return json({ error: 'Unable to determine client IP' }, 400);
   }

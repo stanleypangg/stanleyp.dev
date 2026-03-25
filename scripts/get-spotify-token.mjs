@@ -6,7 +6,7 @@
  */
 
 import http from 'http';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import * as readline from 'readline/promises';
 
 const PORT = 4321;
@@ -28,7 +28,8 @@ const authUrl =
   `&scope=${encodeURIComponent(SCOPES)}`;
 
 console.log('\nOpening Spotify in your browser — click Agree...\n');
-exec(`xdg-open "${authUrl}" 2>/dev/null || open "${authUrl}" 2>/dev/null`);
+const opener = process.platform === 'darwin' ? 'open' : 'xdg-open';
+execFile(opener, [authUrl], () => {});
 
 // Start a temporary server to catch the callback
 const code = await new Promise((resolve, reject) => {

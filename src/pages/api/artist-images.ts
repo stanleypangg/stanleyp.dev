@@ -16,6 +16,13 @@ export async function GET({ url }: { url: URL }) {
     });
   }
 
+  if (names.some(n => n.length > 200)) {
+    return new Response(JSON.stringify({ error: 'Artist name too long (max 200 chars)' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   const token = await getClientToken(
     import.meta.env.SPOTIFY_CLIENT_ID,
     import.meta.env.SPOTIFY_CLIENT_SECRET,

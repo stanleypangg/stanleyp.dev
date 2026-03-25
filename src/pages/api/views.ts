@@ -28,14 +28,17 @@ export async function POST({
   request: Request;
   clientAddress: string;
 }) {
+  const origin = request.headers.get('origin');
+  if (origin && origin !== 'https://stanleyp.dev') {
+    return json({ ok: false }, 403);
+  }
+
   const ua = request.headers.get('user-agent') ?? '';
   if (BOT_RE.test(ua)) {
     return json({ ok: true });
   }
 
-  const ip =
-    clientAddress ||
-    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
+  const ip = clientAddress;
   if (!ip) {
     return json({ ok: false, error: 'Unable to determine client IP' }, 400);
   }
