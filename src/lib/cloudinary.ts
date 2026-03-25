@@ -16,7 +16,7 @@ export type Photo = {
   caption?: string;
 };
 
-const SRCSET_WIDTHS = [400, 800, 1200] as const;
+const SRCSET_WIDTHS = [400, 800] as const;
 const BASE_URL = (cloudName: string) =>
   `https://res.cloudinary.com/${cloudName}/image/upload`;
 
@@ -24,7 +24,7 @@ export function mapResource(cloudName: string, resource: CloudinaryResource): Ph
   const base = BASE_URL(cloudName);
   const id = resource.public_id;
   return {
-    src: `${base}/w_1200,f_auto,q_auto/${id}`,
+    src: `${base}/w_800,f_auto,q_auto/${id}`,
     srcset: SRCSET_WIDTHS.map(w => `${base}/w_${w},f_auto,q_auto/${id} ${w}w`).join(', '),
     width: resource.width,
     height: resource.height,
