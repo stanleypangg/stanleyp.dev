@@ -1,3 +1,35 @@
+/* ── Registered color tokens (enables smooth interpolation) ── */
+@property --bg {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: oklch(97.5% 0.004 80);
+}
+@property --fg {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: oklch(13% 0.004 80);
+}
+@property --muted {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: oklch(45% 0.003 80);
+}
+@property --subtle {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: oklch(57% 0.003 80);
+}
+@property --border {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: oklch(88% 0.003 80);
+}
+@property --dot {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: oklch(83% 0.003 80);
+}
+
 /* ── Color tokens ──────────────────────────────────────────── */
 :root {
   --bg:      oklch(97.5% 0.004  80);
@@ -17,19 +49,15 @@
   --dot:     oklch(33%   0.003 260);
 }
 
-/* ── Theme transition: only color-related properties ──────── */
-html.theme-transitioning,
-html.theme-transitioning *,
-html.theme-transitioning *::before,
-html.theme-transitioning *::after {
+/* ── Theme transition: animate registered tokens on :root ──── */
+html.theme-transitioning {
   transition:
-    background-color 350ms ease,
-    color 350ms ease,
-    border-color 350ms ease,
-    fill 350ms ease,
-    stroke 350ms ease,
-    box-shadow 350ms ease,
-    outline-color 350ms ease !important;
+    --bg 350ms ease,
+    --fg 350ms ease,
+    --muted 350ms ease,
+    --subtle 350ms ease,
+    --border 350ms ease,
+    --dot 350ms ease !important;
 }
 
 /* ── Type tokens ───────────────────────────────────────────── */
@@ -81,7 +109,6 @@ body {
   font-size: var(--text-base);
   line-height: 1.75;
   min-height: 100dvh;
-  transition: background-color 300ms, color 300ms;
 }
 
 
@@ -165,8 +192,6 @@ img, video {
   padding-block: 1.25rem 1rem;
   border-bottom: 1px solid var(--border);
   margin-bottom: 2rem;
-  transition: background-color 300ms;
-
 }
 
 .nav-inner {
@@ -485,10 +510,7 @@ main {
   }
 
   /* Instant theme swap for users who prefer reduced motion */
-  html.theme-transitioning,
-  html.theme-transitioning *,
-  html.theme-transitioning *::before,
-  html.theme-transitioning *::after {
+  html.theme-transitioning {
     transition: none !important;
   }
 }
