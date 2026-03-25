@@ -462,7 +462,7 @@ const isChat     = pathname.startsWith('/chat');
     if (fresh) el.textContent = cached;
 
     try {
-      const res = await fetch('/gc/counter/*.json');
+      const res = await fetch('/gc/counter//.json');
       if (res.ok) {
         const { count } = await res.json();
         if (count) {
