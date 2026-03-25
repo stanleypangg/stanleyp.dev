@@ -429,32 +429,21 @@ const isChat     = pathname.startsWith('/chat');
 
   // ── Visitor counter ───────────────────────────────────────
   const VISITORS_KEY = 'visitor-count-cache';
-  const VISITOR_ID_KEY = 'visitor-id';
+  const TRACKED_KEY = 'view-tracked';
 
-  function getOrCreateVisitorId(): string {
-    let id = localStorage.getItem(VISITOR_ID_KEY);
-    if (!id) {
-      id = crypto.randomUUID();
-      localStorage.setItem(VISITOR_ID_KEY, id);
-    }
-    return id;
+  async function postView() {
+    if (sessionStorage.getItem(TRACKED_KEY)) return;
+    try {
+      const res = await fetch('/api/views', { method: 'POST' });
+      if (res.ok) sessionStorage.setItem(TRACKED_KEY, '1');
+    } catch { /* network failure, continue */ }
   }
 
-  async function trackAndShowVisitors() {
+  async function refreshCount() {
     const el = document.getElementById('visitor-count');
     if (!el) return;
     const cached = localStorage.getItem(VISITORS_KEY);
     if (cached) el.textContent = Number(cached).toLocaleString();
-
-    const visitorId = getOrCreateVisitorId();
-    try {
-      await fetch('/api/views', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ visitorId }),
-      });
-    } catch { /* network failure, continue to GET */ }
-
     try {
       const res = await fetch('/api/views');
       if (res.ok) {
@@ -465,8 +454,8 @@ const isChat     = pathname.startsWith('/chat');
     } catch { /* silently fail */ }
   }
 
-  trackAndShowVisitors();
-  document.addEventListener('astro:after-swap', trackAndShowVisitors);
+  postView().then(refreshCount);
+  document.addEventListener('astro:after-swap', () => refreshCount());
 
   // ── Preload pictures on nav hover / touch ───────────────────────
   let picturesPreloaded = false;
