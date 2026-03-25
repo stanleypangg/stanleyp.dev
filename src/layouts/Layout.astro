@@ -447,20 +447,35 @@ const isChat     = pathname.startsWith('/chat');
 
   // ── Visitor counter (GoatCounter) ────────────────────────
   const VISITORS_KEY = 'visitor-count-cache';
+  const VISITORS_TS_KEY = 'visitor-count-ts';
+  const CACHE_TTL = 86_400_000; // 24h
 
   async function refreshCount() {
     const el = document.getElementById('visitor-count');
     if (!el) return;
+    const wrapper = el.closest('.footer-visitors') as HTMLElement | null;
+
     const cached = localStorage.getItem(VISITORS_KEY);
-    if (cached) el.textContent = cached;
+    const ts = Number(localStorage.getItem(VISITORS_TS_KEY)) || 0;
+    const fresh = cached && Date.now() - ts < CACHE_TTL;
+
+    if (fresh) el.textContent = cached;
+
     try {
       const res = await fetch('/gc/counter/*.json');
       if (res.ok) {
         const { count } = await res.json();
-        el.textContent = count;
-        localStorage.setItem(VISITORS_KEY, count);
+        if (count) {
+          el.textContent = count;
+          localStorage.setItem(VISITORS_KEY, count);
+          localStorage.setItem(VISITORS_TS_KEY, String(Date.now()));
+          return;
+        }
       }
-    } catch { /* silently fail */ }
+    } catch {}
+
+    // No valid cache + fetch failed → hide instead of showing broken "—"
+    if (!fresh && wrapper) wrapper.style.display = 'none';
   }
 
   refreshCount();
