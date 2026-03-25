@@ -464,6 +464,11 @@ main {
   to   { opacity: 1; translate: 0 0;   }
 }
 
+@keyframes enter-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
 /* ── Reduced motion overrides ──────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   /* Remove spatial transitions — keep color-only transitions */
