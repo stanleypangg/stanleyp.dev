@@ -29,6 +29,7 @@
     btn.addEventListener('click', () => {
       const root = document.documentElement;
       root.classList.add('theme-transitioning');
+      void root.offsetWidth; // force reflow so transition rules apply before color change
       const isDark = root.classList.toggle('dark');
       localStorage.setItem('theme', isDark ? 'dark' : 'light');
       syncPressed(btn);
