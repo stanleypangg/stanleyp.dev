@@ -427,6 +427,13 @@ const isChat     = pathname.startsWith('/chat');
   attachCanvas();
   document.addEventListener('astro:after-swap', attachCanvas);
 
+  // Reset persisted footer/wave opacity after every SPA navigation.
+  // Pages that need them hidden (e.g. /pictures) re-hide in their own handler.
+  document.addEventListener('astro:after-swap', () => {
+    document.querySelector<HTMLElement>('.site-footer')?.style.removeProperty('opacity');
+    document.querySelector<HTMLElement>('.wave-wrap')?.style.removeProperty('opacity');
+  });
+
   // ── Visitor counter ───────────────────────────────────────
   const VISITORS_KEY = 'visitor-count-cache';
   const TRACKED_KEY = 'view-tracked';
