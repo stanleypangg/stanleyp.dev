@@ -356,6 +356,7 @@ import Layout from '../layouts/Layout.astro';
   /* ── Constrain wrap/main to viewport on chat page ─────────── */
   :global(.wrap) { height: 100dvh; }
   :global(main)  { min-height: 0; }
+  :global(.wave-wrap) { pointer-events: none; }
 
   /* Override .rule margin-bottom so the feed clips right at the hr line */
   hr {
@@ -523,6 +524,8 @@ import Layout from '../layouts/Layout.astro';
     padding-top: 0.75rem;
     flex-shrink: 0;
     animation: enter-fade 800ms ease-out 210ms both;
+    padding-bottom: 1.25rem;
+    margin-bottom: -1.25rem;
   }
 
   .chat-input {
