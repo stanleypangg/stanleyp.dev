@@ -4,11 +4,12 @@ import { hashIp } from '../../lib/hash-ip';
 import { createServerClient } from '../../lib/supabase';
 import LeoProfanity from 'leo-profanity';
 
-LeoProfanity.clearList();
 const blockedWords = (import.meta.env.BLOCKED_WORDS || '').split(',').map((w: string) => w.trim()).filter(Boolean);
 if (blockedWords.length > 0) LeoProfanity.add(blockedWords);
 
 const BLOCKED = (import.meta.env.BLOCKED_WORDS || '').split(',').map((w: string) => w.trim().toLowerCase()).filter(Boolean);
+const CHAT_DISABLED = import.meta.env.CHAT_DISABLED === 'true';
+const HOURLY_LIMIT = 20;
 
 function containsBlocked(text: string): boolean {
   if (BLOCKED.length === 0) return false;
@@ -32,6 +33,10 @@ export async function GET() {
 }
 
 export async function POST({ request, clientAddress }: { request: Request; clientAddress: string }) {
+  if (CHAT_DISABLED) {
+    return json({ error: 'Chat is temporarily disabled' }, 503);
+  }
+
   const contentType = request.headers.get('content-type');
   if (!contentType?.includes('application/json')) {
     return json({ error: 'Invalid content type' }, 400);
@@ -75,18 +80,22 @@ export async function POST({ request, clientAddress }: { request: Request; clien
 
   const supabase = createServerClient();
 
-  // Rate limit: query DB for most recent message from this IP hash
+  // Rate limit: cooldown between messages
+  const oneHourAgo = new Date(Date.now() - 3_600_000).toISOString();
   const { data: recent } = await supabase
     .from('chat_messages')
     .select('created_at')
     .eq('ip_hash', ipHash)
-    .order('created_at', { ascending: false })
-    .limit(1);
+    .gte('created_at', oneHourAgo)
+    .order('created_at', { ascending: false });
 
-  if (recent?.[0]) {
+  if (recent && recent.length > 0) {
     const lastSent = new Date(recent[0].created_at).getTime();
     if (Date.now() - lastSent < 5_000) {
       return json({ error: 'Too fast. Wait a few seconds.' }, 429);
+    }
+    if (recent.length >= HOURLY_LIMIT) {
+      return json({ error: 'Too many messages. Try again later.' }, 429);
     }
   }
 
