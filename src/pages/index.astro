@@ -12,8 +12,8 @@ import NowPlaying from '../components/NowPlaying.astro';
 <p class="tagline">Software Engineer</p>
       <p class="bio">
         I like making software that actually works for people, and I like understanding
-        exactly how it does that. Studying CS at the University of Toronto,
-        interning at Shopify.
+        exactly how it does that. <span class="bio-detail">Studying CS at the University of Toronto,
+        interning at Shopify.</span>
       </p>
     </div>
     <div class="hero-photo">
@@ -283,23 +283,21 @@ import NowPlaying from '../components/NowPlaying.astro';
 
   /* ── Mobile ────────────────────────────────────────────────── */
   @media (max-width: 600px) {
-    /* Keep side-by-side; constrain photo with fluid sizing */
-    .hero {
-      align-items: flex-start;
-    }
-
     .hero-photo {
-      width: clamp(104px, 27vw, 128px);
+      width: clamp(112px, 30vw, 140px);
       flex-shrink: 0;
-      overflow: hidden;
+      overflow: visible;
     }
 
     .hero-photo img {
-      width: 100%;
-      height: auto;
-      aspect-ratio: 3 / 4;
-      object-fit: cover;
-      object-position: top center;
+      width: calc(100% + 1.5rem);
+      max-width: none;
+      margin-left: -1.5rem;
+      object-position: top 30%;
+    }
+
+    .bio-detail {
+      display: none;
     }
 
     /* Tighten the meta date so it doesn't crowd on narrow widths */
