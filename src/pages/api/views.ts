@@ -38,7 +38,12 @@ export async function POST({
     return json({ ok: true });
   }
 
-  const ip = clientAddress;
+  // Vercel overwrites x-forwarded-for at the edge, so it is trustworthy and
+  // reflects the real client IP even when clientAddress resolves to an
+  // internal/edge address.
+  const ip =
+    request.headers.get('x-forwarded-for')?.split(',')[0].trim() ||
+    clientAddress;
   if (!ip) {
     return json({ ok: false, error: 'Unable to determine client IP' }, 400);
   }
