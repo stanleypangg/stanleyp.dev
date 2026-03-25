@@ -25,8 +25,21 @@ async function fetchPhotos() {
 }
 
 function readOrder() {
-  try { return JSON.parse(fs.readFileSync(ORDER_FILE, 'utf-8')); }
-  catch { return []; }
+  try {
+    const raw = JSON.parse(fs.readFileSync(ORDER_FILE, 'utf-8'));
+    return raw.map(entry => typeof entry === 'string' ? entry : entry.id);
+  } catch { return []; }
+}
+
+function readMeta() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(ORDER_FILE, 'utf-8'));
+    const map = {};
+    for (const entry of raw) {
+      if (typeof entry === 'object' && entry.id) map[entry.id] = entry;
+    }
+    return map;
+  } catch { return {}; }
 }
 
 function buildHTML(photos, currentOrder) {
@@ -136,7 +149,10 @@ const server = http.createServer(async (req, res) => {
     let body = '';
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
-      fs.writeFileSync(ORDER_FILE, JSON.stringify(JSON.parse(body), null, 2) + '\n');
+      const ids = JSON.parse(body);
+      const meta = readMeta();
+      const result = ids.map(id => meta[id] || { id });
+      fs.writeFileSync(ORDER_FILE, JSON.stringify(result, null, 2) + '\n');
       res.writeHead(200);
       res.end('ok');
     });

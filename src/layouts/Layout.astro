@@ -4,6 +4,7 @@ import ThemeToggle from '../components/ThemeToggle.astro';
 import WaveViz from '../components/WaveViz.astro';
 import CursorEffect from '../components/CursorEffect.astro';
 import '../styles/global.css';
+import photoOrder from '../data/photo-order.json';
 
 interface Props {
   title?: string;
@@ -20,6 +21,18 @@ const {
   ogImage = '/og.png',
   noindex = false,
 } = Astro.props;
+
+// Build srcsets for first 6 images — embedded on nav link for hover preloading
+const cloudName = import.meta.env.CLOUDINARY_CLOUD_NAME;
+const preloadSrcsets = cloudName
+  ? photoOrder
+      .filter((p): p is { id: string; w: number; h: number } => typeof p === 'object' && 'w' in p)
+      .slice(0, 6)
+      .map(p => {
+        const base = `https://res.cloudinary.com/${cloudName}/image/upload`;
+        return [400, 800].map(w => `${base}/w_${w},f_auto,q_auto/${p.id} ${w}w`).join(', ');
+      })
+  : [];
 
 const canonicalURL = new URL(Astro.url.pathname, Astro.site);
 const ogImageURL = new URL(ogImage, Astro.site).toString();
@@ -73,6 +86,9 @@ const isChat     = pathname.startsWith('/chat');
     <!-- Spotify album art CDN — used by NowPlaying on home page and music page -->
     <link rel="preconnect" href="https://i.scdn.co" crossorigin />
     {isMusic && <link rel="preconnect" href="https://lastfm.freetls.fastly.net" crossorigin />}
+
+    {/* Cloudinary image CDN — warm connection for direct navigation to /pictures */}
+    {isPictures && <link rel="preconnect" href="https://res.cloudinary.com" crossorigin />}
     <link
       rel="preload"
       as="style"
@@ -203,6 +219,7 @@ const isChat     = pathname.startsWith('/chat');
                 class="nav-link"
                 data-astro-prefetch="hover"
                 aria-current={isPictures ? 'page' : undefined}
+                data-preload-images={preloadSrcsets.length > 0 ? JSON.stringify(preloadSrcsets) : undefined}
               >pictures</a>
             </li>
             <li>
@@ -450,5 +467,38 @@ const isChat     = pathname.startsWith('/chat');
 
   trackAndShowVisitors();
   document.addEventListener('astro:after-swap', trackAndShowVisitors);
+
+  // ── Preload pictures on nav hover / touch ───────────────────────
+  let picturesPreloaded = false;
+
+  function preloadPictures(target: HTMLElement) {
+    if (picturesPreloaded) return;
+    picturesPreloaded = true;
+
+    const pc = document.createElement('link');
+    pc.rel = 'preconnect';
+    pc.href = 'https://res.cloudinary.com';
+    pc.crossOrigin = '';
+    document.head.appendChild(pc);
+
+    const srcsets: string[] = JSON.parse(target.dataset.preloadImages || '[]');
+    const sizes = '(max-width: 760px) calc(50vw - 1.5rem), 344px';
+    for (const srcset of srcsets) {
+      const pl = document.createElement('link');
+      pl.rel = 'preload';
+      pl.as = 'image';
+      pl.imageSrcset = srcset;
+      pl.imageSizes = sizes;
+      document.head.appendChild(pl);
+    }
+  }
+
+  function onPreloadHint(e: Event) {
+    const t = (e.target as HTMLElement).closest<HTMLElement>('[data-preload-images]');
+    if (t) preloadPictures(t);
+  }
+
+  document.addEventListener('mouseover', onPreloadHint, { passive: true });
+  document.addEventListener('touchstart', onPreloadHint, { passive: true });
 </script>
 </html>

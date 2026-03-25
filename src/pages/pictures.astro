@@ -3,23 +3,40 @@ export const prerender = false;
 
 import Layout from '../layouts/Layout.astro';
 import PicturesGallery from '../components/PicturesGallery.astro';
+import photoMeta from '../data/photo-order.json';
 
 // Cache at Vercel's CDN edge: serve cached for 1h, revalidate in background for up to 24h
 Astro.response.headers.set('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
 
+const skPhotos = photoMeta
+  .filter((p): p is { id: string; w: number; h: number } => typeof p === 'object' && 'w' in p)
+  .slice(0, 12);
+const skLeft = skPhotos.filter((_, i) => i % 2 === 0);
+const skRight = skPhotos.filter((_, i) => i % 2 !== 0);
+
 ---
 
 <Layout title="Pictures" description="Photos by Stanley Pang.">
-  <div id="skeleton-screen" aria-hidden="true">
-    <div class="sk-grid">
-      {["3/2","2/3","1/1","3/4","3/2","2/3","3/4","1/1","2/3","3/2","3/4","2/3"].map((ratio, i) => (
-        <div class="sk-item" style={`aspect-ratio: ${ratio}; animation-delay: ${(i % 5) * 130}ms`}></div>
-      ))}
-    </div>
-  </div>
   <section data-pictures-root>
     <PicturesGallery server:defer>
-      <span slot="fallback"></span>
+      <div slot="fallback" id="skeleton-screen" aria-hidden="true">
+        <div class="sk-grid">
+          <div class="sk-col sk-left">
+            {skLeft.map((p, i) => (
+              <div class="sk-wrap" style={`animation-delay: ${(i * 2 % 5) * 130}ms`}>
+                <img width={p.w} height={p.h} alt="" class="sk-sizer" />
+              </div>
+            ))}
+          </div>
+          <div class="sk-col sk-right">
+            {skRight.map((p, i) => (
+              <div class="sk-wrap" style={`animation-delay: ${((i * 2 + 1) % 5) * 130}ms`}>
+                <img width={p.w} height={p.h} alt="" class="sk-sizer" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </PicturesGallery>
   </section>
 
@@ -46,33 +63,30 @@ Astro.response.headers.set('Cache-Control', 's-maxage=3600, stale-while-revalida
 </Layout>
 
 <style>
-  #skeleton-screen {
-    position: fixed;
-    inset: 0;
-    overflow: hidden;
-    pointer-events: none;
-    z-index: 5;
-    background: var(--bg);
-    transition: opacity 500ms ease;
-  }
-
-  #skeleton-screen.is-gone {
-    opacity: 0;
-  }
-
   .sk-grid {
-    columns: 2;
-    column-gap: 8px;
-    max-width: var(--max-w);
-    margin-inline: auto;
-    padding-inline: var(--pad-x);
-    padding-top: 6rem;
+    display: flex;
+    gap: 0.5rem;
+    margin-top: -1rem;
   }
 
-  .sk-item {
-    break-inside: avoid;
-    margin-bottom: 8px;
+  .sk-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .sk-left {
+    padding-left: 5px;
+  }
+
+  .sk-right {
+    padding-right: 5px;
+  }
+
+  .sk-wrap {
     border-radius: 6px;
+    overflow: hidden;
     background:
       linear-gradient(
         to bottom,
@@ -85,6 +99,13 @@ Astro.response.headers.set('Cache-Control', 's-maxage=3600, stale-while-revalida
         transparent 58%
       );
     animation: photo-skeleton-breathe 1.6s ease-in-out infinite;
+  }
+
+  .sk-sizer {
+    width: 100%;
+    height: auto;
+    display: block;
+    visibility: hidden;
   }
 
   /* ── Adjacent image overlays (shown during drag) ───────────── */
@@ -349,7 +370,7 @@ Astro.response.headers.set('Cache-Control', 's-maxage=3600, stale-while-revalida
   function spanItem(item: HTMLElement) {
     const h = measureHeight(item);
     if (h === 0) return;
-    item.style.gridRowEnd = `span ${Math.ceil((h + GAP) / 4)}`;
+    item.style.gridRowEnd = `span ${Math.round(h) + GAP}`;
   }
 
   function spanAll() {
@@ -357,7 +378,7 @@ Astro.response.headers.set('Cache-Control', 's-maxage=3600, stale-while-revalida
     const items = Array.from(document.querySelectorAll<HTMLElement>('.photo-item'));
     const heights = items.map(measureHeight);                          // all reads
     items.forEach((item, i) => {                                       // all writes
-      if (heights[i] > 0) item.style.gridRowEnd = `span ${Math.ceil((heights[i] + GAP) / 4)}`;
+      if (heights[i] > 0) item.style.gridRowEnd = `span ${Math.round(heights[i]) + GAP}`;
     });
   }
 
@@ -365,15 +386,51 @@ Astro.response.headers.set('Cache-Control', 's-maxage=3600, stale-while-revalida
     const grid = document.querySelector<HTMLElement>('.photo-grid');
     if (!grid) return;
 
-    const gridMidX = grid.getBoundingClientRect().left + (grid.getBoundingClientRect().width / 2);
+    const gridRect = grid.getBoundingClientRect();
+    const gridMidX = gridRect.left + gridRect.width / 2;
     const items = Array.from(grid.querySelectorAll<HTMLElement>('.photo-item'));
 
-    items.forEach((item) => {
+    // Batch reads — one layout computation for all items
+    const isLeft = items.map(item => {
       const rect = item.getBoundingClientRect();
-      const itemMidX = rect.left + (rect.width / 2);
-      const isLeft = itemMidX < gridMidX;
-      item.classList.toggle('is-left-column', isLeft);
-      item.classList.toggle('is-right-column', !isLeft);
+      return (rect.left + rect.width / 2) < gridMidX;
+    });
+
+    // Batch writes — class toggles no longer interleave with reads
+    items.forEach((item, i) => {
+      item.classList.toggle('is-left-column', isLeft[i]);
+      item.classList.toggle('is-right-column', !isLeft[i]);
+    });
+  }
+
+  // ── Reveal queue — batches concurrent decodes into one layout pass ──
+  let revealQueue: HTMLElement[] = [];
+  let revealRaf = 0;
+
+  function queueReveal(item: HTMLElement) {
+    revealQueue.push(item);
+    if (!revealRaf) revealRaf = requestAnimationFrame(flushReveals);
+  }
+
+  function flushReveals() {
+    revealRaf = 0;
+    const batch = revealQueue;
+    revealQueue = [];
+
+    // Batch reads
+    const heights = batch.map(measureHeight);
+    // Batch writes
+    batch.forEach((item, i) => {
+      if (heights[i] > 0) item.style.gridRowEnd = `span ${Math.round(heights[i]) + GAP}`;
+      item.style.transitionDelay = '0ms';
+    });
+
+    updateOuterPadding();
+    spanAll();
+
+    // Add .is-ready in next frame after layout settles
+    requestAnimationFrame(() => {
+      batch.forEach(item => item.classList.add('is-ready'));
     });
   }
 
@@ -385,7 +442,21 @@ Astro.response.headers.set('Cache-Control', 's-maxage=3600, stale-while-revalida
   let savedFocus: HTMLElement | null = null;
   let lightboxImageToken = 0;
   let galleryObserver: MutationObserver | null = null;
-  let dismissSkFn: (() => void) | null = null;
+
+  const prefetched = new Set<string>();
+  function prefetchImage(url: string) {
+    if (prefetched.has(url)) return;
+    prefetched.add(url);
+    const img = new Image();
+    img.src = url;
+  }
+
+  function prefetchAdjacent() {
+    const len = lightboxPhotos.length;
+    if (len < 2) return;
+    prefetchImage(lightboxPhotos[(currentIndex + 1) % len].src);
+    prefetchImage(lightboxPhotos[(currentIndex - 1 + len) % len].src);
+  }
 
   function getPhotos(): Photo[] {
     const el = document.getElementById('photo-data');
@@ -438,6 +509,7 @@ Astro.response.headers.set('Cache-Control', 's-maxage=3600, stale-while-revalida
     savedFocus = document.activeElement as HTMLElement | null;
     dialog.showModal();
     dialog.querySelector<HTMLButtonElement>('.lightbox-close')?.focus();
+    prefetchAdjacent();
   }
 
   function onLightboxImageReady(img: HTMLImageElement, callback: () => void) {
@@ -486,57 +558,41 @@ Astro.response.headers.set('Cache-Control', 's-maxage=3600, stale-while-revalida
         img.style.opacity = '';
         img.classList.add(inClass);
         img.addEventListener('animationend', () => img.classList.remove(inClass), { once: true });
+        prefetchAdjacent();
       });
     }, { once: true });
   }
 
   function init() {
-    // ── Skeleton screen ───────────────────────────────────────
-    const skScreen = document.getElementById('skeleton-screen');
-    if (skScreen && !skScreen.dataset.skSetup) {
-      skScreen.dataset.skSetup = '1';
-
-      const footer = document.querySelector<HTMLElement>('.site-footer');
-      const wave   = document.querySelector<HTMLElement>('.wave-wrap');
+    // ── Hide footer/wave until gallery loads ────────────────
+    const footer = document.querySelector<HTMLElement>('.site-footer');
+    const wave   = document.querySelector<HTMLElement>('.wave-wrap');
+    if (!document.querySelector('[data-pictures-gallery]')) {
       [footer, wave].forEach(el => { if (el) el.style.opacity = '0'; });
-
-      const dismissSk = () => {
-        if (skScreen.classList.contains('is-gone')) return;
-        skScreen.classList.add('is-gone');
-        [footer, wave].forEach(el => {
-          if (!el) return;
-          el.style.transition = 'opacity 500ms ease';
-          el.style.opacity = '';
-          el.addEventListener('transitionend', () => { el.style.transition = ''; }, { once: true });
-        });
-        skScreen.addEventListener('transitionend', () => skScreen.remove(), { once: true });
-      };
-      dismissSkFn = dismissSk;
-      // Fallback: dismiss after 6s if gallery never loads
-      setTimeout(() => { dismissSkFn?.(); dismissSkFn = null; }, 6000);
     }
 
-    // Masonry grid sizing + staggered fade-in top-to-bottom
-    document.querySelectorAll<HTMLImageElement>('.photo-img').forEach((img, i) => {
+    // Masonry grid sizing + staggered fade-in
+    document.querySelectorAll<HTMLImageElement>('.photo-img').forEach((img) => {
       const item = img.closest('.photo-item') as HTMLElement;
-      // Span immediately from aspect-ratio attrs to keep layout stable before load
-      spanItem(item);
 
-      const reveal = () => {
-        spanItem(item); // re-span with actual loaded dimensions
-        updateOuterPadding();
-        item.style.transitionDelay = '0ms';
-        requestAnimationFrame(() => {
-          item.classList.add('is-ready');
-        });
+      // decode() off the main thread, then queue batched reveal
+      const onLoaded = () => {
+        img.decode().then(
+          () => queueReveal(item),
+          () => queueReveal(item)
+        );
       };
 
       if (img.complete) {
-        requestAnimationFrame(reveal);
+        onLoaded();
       } else {
-        img.addEventListener('load', () => requestAnimationFrame(reveal), { once: true });
+        img.addEventListener('load', onLoaded, { once: true });
       }
     });
+
+    // Initial layout — batched reads then writes, no per-item thrashing
+    updateOuterPadding();
+    spanAll();
 
     // Abort previous listeners before re-attaching.
     // init() runs twice on first load (direct call + astro:page-load), which would
@@ -805,14 +861,23 @@ Astro.response.headers.set('Cache-Control', 's-maxage=3600, stale-while-revalida
     }, { signal });
   }
 
+  function showFooter() {
+    const footer = document.querySelector<HTMLElement>('.site-footer');
+    const wave   = document.querySelector<HTMLElement>('.wave-wrap');
+    [footer, wave].forEach(el => {
+      if (!el) return;
+      el.style.transition = 'opacity 500ms ease';
+      el.style.opacity = '';
+      el.addEventListener('transitionend', () => { el.style.transition = ''; }, { once: true });
+    });
+  }
+
   function observeGallery() {
     const root = document.querySelector<HTMLElement>('[data-pictures-root]');
     if (!root) return;
 
-    // Gallery already present (e.g. cached navigation)
     if (root.querySelector('[data-pictures-gallery]')) {
-      dismissSkFn?.();
-      dismissSkFn = null;
+      showFooter();
       init();
       return;
     }
@@ -821,8 +886,7 @@ Astro.response.headers.set('Cache-Control', 's-maxage=3600, stale-while-revalida
     galleryObserver = new MutationObserver(() => {
       if (root.querySelector('[data-pictures-gallery]')) {
         galleryObserver?.disconnect();
-        dismissSkFn?.();
-        dismissSkFn = null;
+        showFooter();
         init();
       }
     });
