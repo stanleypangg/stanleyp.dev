@@ -122,11 +122,11 @@ const skRight = skPhotos.filter((_, i) => i % 2 !== 0);
   }
 
   .lb-adj-img {
-    width: min(90vw, 1100px);
-    height: 70dvh;
-    object-fit: contain;
-    object-position: top center;
-    border-radius: 4px;
+    max-width: min(90vw, 1100px);
+    max-height: 70dvh;
+    width: auto;
+    height: auto;
+    border-radius: 8px;
     display: block;
     user-select: none;
     will-change: transform;
@@ -179,11 +179,11 @@ const skRight = skPhotos.filter((_, i) => i % 2 !== 0);
   }
 
   .lightbox-img {
-    width: min(90vw, 1100px);
-    height: 70dvh;
-    object-fit: contain;
-    object-position: top center;
-    border-radius: 4px;
+    max-width: min(90vw, 1100px);
+    max-height: 70dvh;
+    width: auto;
+    height: auto;
+    border-radius: 8px;
     filter: saturate(1);
     display: block;
     cursor: grab;
