@@ -314,6 +314,14 @@ import NowPlaying from '../components/NowPlaying.astro';
   }
 
   /* ── Page entrance ─────────────────────────────────────────── */
+  /* Explicit opacity: 0 prevents a single-frame flash when the keyframes
+     definition lives in a separate CSS chunk from the animation property.
+     The running animation overrides this; forwards fill keeps opacity: 1. */
+  .hero,
+  section {
+    opacity: 0;
+  }
+
   .hero {
     animation: enter-fade 800ms ease-out both;
   }
@@ -363,6 +371,7 @@ import NowPlaying from '../components/NowPlaying.astro';
   @media (prefers-reduced-motion: reduce) {
     .hero, section {
       animation: none;
+      opacity: 1;
     }
     /* No transition = no flicker: safe to use plain :hover */
     .display-name {
