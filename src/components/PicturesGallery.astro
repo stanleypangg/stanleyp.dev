@@ -1,0 +1,192 @@
+---
+import { mapResource, sortNewestFirst, type Photo } from '../lib/cloudinary';
+import photoOrder from '../data/photo-order.json';
+
+const { CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET } = import.meta.env;
+
+let photos: Photo[] = [];
+
+if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
+  try {
+    const res = await fetch(
+      `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/resources/search`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${btoa(`${CLOUDINARY_API_KEY}:${CLOUDINARY_API_SECRET}`)}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          expression: 'asset_folder=pictures',
+          with_field: ['context'],
+          max_results: 500,
+        }),
+      }
+    );
+
+    if (res.ok) {
+      const { resources } = await res.json();
+      const ordered = photoOrder.length > 0
+        ? [...resources].sort((a, b) => {
+            const ai = photoOrder.indexOf(a.public_id);
+            const bi = photoOrder.indexOf(b.public_id);
+            if (ai === -1 && bi === -1) return 0;
+            if (ai === -1) return 1;
+            if (bi === -1) return -1;
+            return ai - bi;
+          })
+        : sortNewestFirst(resources);
+
+      photos = ordered.map((r) => mapResource(CLOUDINARY_CLOUD_NAME as string, r));
+    } else {
+      console.warn(`[pictures] Cloudinary API returned ${res.status}`);
+    }
+  } catch (err) {
+    console.warn(
+      '[pictures] Failed to fetch from Cloudinary:',
+      err instanceof Error ? err.message : 'unknown error'
+    );
+  }
+}
+---
+
+<div data-pictures-gallery>
+  {photos.length === 0 ? (
+    <p class="empty">Nothing here yet.</p>
+  ) : (
+    <ul class="photo-grid">
+      {photos.map((photo, i) => (
+        <li class={`photo-item${i < 6 ? ' is-eager' : ''}`}>
+          <div class="photo-wrap" role="button" tabindex="0" aria-label={photo.alt || `Photo ${i + 1}`}>
+            <span class="photo-skeleton" aria-hidden="true"></span>
+            <img
+              src={photo.src}
+              srcset={photo.srcset}
+              sizes="(max-width: 760px) calc(50vw - 1.5rem), 344px"
+              width={photo.width}
+              height={photo.height}
+              alt={photo.alt}
+              class="photo-img"
+              loading={i < 6 ? 'eager' : 'lazy'}
+              decoding={i < 6 ? 'auto' : 'async'}
+              fetchpriority={i < 6 ? 'high' : 'auto'}
+              draggable="false"
+            />
+          </div>
+        </li>
+      ))}
+    </ul>
+  )}
+
+  <script id="photo-data" type="application/json" set:html={JSON.stringify(photos)} />
+</div>
+
+<style>
+  .empty {
+    margin-top: -1rem;
+  }
+
+  .photo-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    grid-auto-rows: 4px;
+    column-gap: 0.5rem;
+    row-gap: 0;
+    list-style: none;
+    cursor: grab;
+    margin-top: -1rem;
+  }
+
+  .photo-grid.is-dragging {
+    cursor: grabbing;
+  }
+
+  .photo-item {
+    box-sizing: border-box;
+    padding-block: 0;
+  }
+
+  .photo-item.is-left-column {
+    padding-left: 5px;
+    padding-right: 0;
+  }
+
+  .photo-item.is-right-column {
+    padding-left: 0;
+    padding-right: 5px;
+  }
+
+  .photo-wrap {
+    position: relative;
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 0 0 0px var(--bg), 0 0 0 0px var(--fg);
+    transition: box-shadow 200ms ease;
+    cursor: pointer;
+  }
+
+  .photo-skeleton {
+    position: absolute;
+    inset: 0;
+    display: block;
+    z-index: 1;
+    background:
+      linear-gradient(
+        to bottom,
+        oklch(from var(--border) l c h / 0.72),
+        oklch(from var(--border) l c h / 0.54)
+      ),
+      radial-gradient(
+        circle at 50% 18%,
+        oklch(from var(--bg) l c h / 0.12),
+        transparent 58%
+      );
+    animation: photo-skeleton-breathe 1.6s ease-in-out infinite;
+    transition: opacity 260ms ease;
+    pointer-events: none;
+  }
+
+  @keyframes photo-skeleton-breathe {
+    0%, 100% { opacity: 0.92; }
+    50%       { opacity: 0.72; }
+  }
+
+  .photo-item.is-ready .photo-skeleton {
+    opacity: 0;
+  }
+
+  .photo-item.is-ready .photo-wrap:hover {
+    box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--fg);
+  }
+
+  .photo-wrap:focus-visible {
+    outline: 2px solid var(--fg);
+    outline-offset: 2px;
+  }
+
+  .photo-img {
+    position: relative;
+    z-index: 2;
+    width: 100%;
+    height: auto;
+    display: block;
+    opacity: 0;
+    filter: saturate(0.85);
+    transition: opacity 420ms cubic-bezier(0.16, 1, 0.3, 1), filter 300ms ease;
+  }
+
+  .photo-item.is-ready .photo-img {
+    opacity: 1;
+  }
+
+  .photo-item.is-ready .photo-wrap:hover .photo-img {
+    filter: saturate(1);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .photo-item {
+      opacity: 1;
+      transition: none;
+    }
+  }
+</style>

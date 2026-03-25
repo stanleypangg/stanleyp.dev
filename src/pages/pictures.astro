@@ -2,83 +2,26 @@
 export const prerender = false;
 
 import Layout from '../layouts/Layout.astro';
-import { mapResource, sortNewestFirst, type Photo } from '../lib/cloudinary';
-import photoOrder from '../data/photo-order.json';
+import PicturesGallery from '../components/PicturesGallery.astro';
 
 // Cache at Vercel's CDN edge: serve cached for 1h, revalidate in background for up to 24h
 Astro.response.headers.set('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
 
-const { CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET } = import.meta.env;
-
-let photos: Photo[] = [];
-
-if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
-  try {
-    const res = await fetch(
-      `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/resources/search`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Basic ${btoa(`${CLOUDINARY_API_KEY}:${CLOUDINARY_API_SECRET}`)}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          expression: 'asset_folder=pictures',
-          with_field: ['context'],
-          max_results: 500,
-        }),
-      }
-    );
-    if (res.ok) {
-      const { resources } = await res.json();
-      const ordered = photoOrder.length > 0
-        ? [...resources].sort((a, b) => {
-            const ai = photoOrder.indexOf(a.public_id);
-            const bi = photoOrder.indexOf(b.public_id);
-            if (ai === -1 && bi === -1) return 0;
-            if (ai === -1) return 1;
-            if (bi === -1) return -1;
-            return ai - bi;
-          })
-        : sortNewestFirst(resources);
-      photos = ordered.map(r => mapResource(CLOUDINARY_CLOUD_NAME as string, r));
-    } else {
-      console.warn(`[pictures] Cloudinary API returned ${res.status}`);
-    }
-  } catch (err) {
-    console.warn('[pictures] Failed to fetch from Cloudinary:', err instanceof Error ? err.message : 'unknown error');
-  }
-}
 ---
 
 <Layout title="Pictures" description="Photos by Stanley Pang.">
-  {photos.length === 0 ? (
-    <p class="empty">Nothing here yet.</p>
-  ) : (
-    <ul class="photo-grid">
-      {photos.map((photo, i) => (
-        <li class={`photo-item${i < 6 ? ' is-eager' : ''}`}>
-          <div class="photo-wrap" role="button" tabindex="0" aria-label={photo.alt || `Photo ${i + 1}`}>
-            <img
-              src={photo.src}
-              srcset={photo.srcset}
-              sizes="(max-width: 760px) calc(50vw - 1.5rem), 344px"
-              width={photo.width}
-              height={photo.height}
-              alt={photo.alt}
-              class="photo-img"
-              loading={i < 6 ? 'eager' : 'lazy'}
-              decoding={i < 6 ? 'auto' : 'async'}
-              fetchpriority={i < 6 ? 'high' : 'auto'}
-              draggable="false"
-            />
-          </div>
-        </li>
+  <div id="skeleton-screen" aria-hidden="true">
+    <div class="sk-grid">
+      {["3/2","2/3","1/1","3/4","3/2","2/3","3/4","1/1","2/3","3/2","3/4","2/3"].map((ratio, i) => (
+        <div class="sk-item" style={`aspect-ratio: ${ratio}; animation-delay: ${(i % 5) * 130}ms`}></div>
       ))}
-    </ul>
-  )}
-
-  <script id="photo-data" type="application/json" set:html={JSON.stringify(photos)} />
+    </div>
+  </div>
+  <section data-pictures-root>
+    <PicturesGallery server:defer>
+      <span slot="fallback"></span>
+    </PicturesGallery>
+  </section>
 
   <dialog id="lightbox" class="lightbox" aria-label="Photo viewer">
     <div class="lb-adj-wrap" id="lb-adj-prev" aria-hidden="true">
@@ -103,73 +46,45 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
 </Layout>
 
 <style>
-  .empty {
-    margin-top: -1rem;
-  }
-
-  .photo-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    grid-auto-rows: 4px;
-    column-gap: 0.5rem;
-    row-gap: 0;
-    list-style: none;
-    cursor: grab;
-    margin-top: -1rem;
-  }
-
-  .photo-grid.is-dragging {
-    cursor: grabbing;
-  }
-
-  .photo-item {
-    box-sizing: border-box;
-    padding-block: 0;
-    opacity: 0;
-    transition: opacity 400ms cubic-bezier(0.16, 1, 0.3, 1);
-  }
-
-  .photo-item.is-left-column {
-    padding-left: 5px;
-    padding-right: 0;
-  }
-
-  .photo-item.is-right-column {
-    padding-left: 0;
-    padding-right: 5px;
-  }
-
-  .photo-item.is-ready {
-    opacity: 1;
-  }
-
-  .photo-wrap {
-    border-radius: 6px;
+  #skeleton-screen {
+    position: fixed;
+    inset: 0;
     overflow: hidden;
-    box-shadow: 0 0 0 0px var(--bg), 0 0 0 0px var(--fg);
-    transition: box-shadow 200ms ease;
-    cursor: pointer;
+    pointer-events: none;
+    z-index: 5;
+    background: var(--bg);
+    transition: opacity 500ms ease;
   }
 
-  .photo-wrap:hover {
-    box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--fg);
+  #skeleton-screen.is-gone {
+    opacity: 0;
   }
 
-  .photo-wrap:focus-visible {
-    outline: 2px solid var(--fg);
-    outline-offset: 2px;
+  .sk-grid {
+    columns: 2;
+    column-gap: 8px;
+    max-width: var(--max-w);
+    margin-inline: auto;
+    padding-inline: var(--pad-x);
+    padding-top: 6rem;
   }
 
-  .photo-img {
-    width: 100%;
-    height: auto;
-    display: block;
-    filter: saturate(0.85);
-    transition: filter 300ms ease;
-  }
-
-  .photo-wrap:hover .photo-img {
-    filter: saturate(1);
+  .sk-item {
+    break-inside: avoid;
+    margin-bottom: 8px;
+    border-radius: 6px;
+    background:
+      linear-gradient(
+        to bottom,
+        oklch(from var(--border) l c h / 0.72),
+        oklch(from var(--border) l c h / 0.54)
+      ),
+      radial-gradient(
+        circle at 50% 18%,
+        oklch(from var(--bg) l c h / 0.12),
+        transparent 58%
+      );
+    animation: photo-skeleton-breathe 1.6s ease-in-out infinite;
   }
 
   /* ── Adjacent image overlays (shown during drag) ───────────── */
@@ -260,22 +175,42 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
   }
 
   @keyframes lb-out-left {
-    to { opacity: 0; translate: -48px 0; }
+    to {
+      opacity: 0;
+      transform: translate3d(-28px, 0, 0) scale(0.985);
+    }
   }
   @keyframes lb-out-right {
-    to { opacity: 0; translate: 48px 0; }
+    to {
+      opacity: 0;
+      transform: translate3d(28px, 0, 0) scale(0.985);
+    }
   }
   @keyframes lb-in-left {
-    from { opacity: 0; translate: -48px 0; }
+    from {
+      opacity: 0;
+      transform: translate3d(-28px, 0, 0) scale(0.992);
+    }
+    to {
+      opacity: 1;
+      transform: translate3d(0, 0, 0) scale(1);
+    }
   }
   @keyframes lb-in-right {
-    from { opacity: 0; translate: 48px 0; }
+    from {
+      opacity: 0;
+      transform: translate3d(28px, 0, 0) scale(0.992);
+    }
+    to {
+      opacity: 1;
+      transform: translate3d(0, 0, 0) scale(1);
+    }
   }
 
-  .lightbox-img.lb-out-left  { animation: lb-out-left  180ms cubic-bezier(0.4, 0, 1, 1) both; }
-  .lightbox-img.lb-out-right { animation: lb-out-right 180ms cubic-bezier(0.4, 0, 1, 1) both; }
-  .lightbox-img.lb-in-left   { animation: lb-in-left   220ms cubic-bezier(0, 0, 0.2, 1) both; }
-  .lightbox-img.lb-in-right  { animation: lb-in-right  220ms cubic-bezier(0, 0, 0.2, 1) both; }
+  .lightbox-img.lb-out-left  { animation: lb-out-left  210ms cubic-bezier(0.4, 0, 1, 1) both; }
+  .lightbox-img.lb-out-right { animation: lb-out-right 210ms cubic-bezier(0.4, 0, 1, 1) both; }
+  .lightbox-img.lb-in-left   { animation: lb-in-left   320ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+  .lightbox-img.lb-in-right  { animation: lb-in-right  320ms cubic-bezier(0.16, 1, 0.3, 1) both; }
 
   .lightbox-close {
     position: absolute;
@@ -370,10 +305,6 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .photo-item {
-      opacity: 1;
-      transition: none;
-    }
     .lightbox::backdrop {
       backdrop-filter: none;
       -webkit-backdrop-filter: none;
@@ -453,6 +384,8 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
   let lbController: AbortController | null = null;
   let savedFocus: HTMLElement | null = null;
   let lightboxImageToken = 0;
+  let galleryObserver: MutationObserver | null = null;
+  let dismissSkFn: (() => void) | null = null;
 
   function getPhotos(): Photo[] {
     const el = document.getElementById('photo-data');
@@ -507,6 +440,16 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
     dialog.querySelector<HTMLButtonElement>('.lightbox-close')?.focus();
   }
 
+  function onLightboxImageReady(img: HTMLImageElement, callback: () => void) {
+    const start = () => requestAnimationFrame(() => requestAnimationFrame(callback));
+    if (img.complete && img.currentSrc) {
+      start();
+      return;
+    }
+    img.addEventListener('load', start, { once: true });
+    img.addEventListener('error', start, { once: true });
+  }
+
   function closeLightbox() {
     const dialog = document.getElementById('lightbox') as HTMLDialogElement | null;
     dialog?.close();
@@ -539,22 +482,40 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
       currentIndex = (currentIndex + delta + len) % len;
       updateLightbox({ hideUntilLoaded: true });
 
-      const enter = () => {
+      onLightboxImageReady(img, () => {
         img.style.opacity = '';
         img.classList.add(inClass);
         img.addEventListener('animationend', () => img.classList.remove(inClass), { once: true });
-      };
-
-      if (img.complete) {
-        enter();
-      } else {
-        img.addEventListener('load', enter, { once: true });
-        img.addEventListener('error', enter, { once: true });
-      }
+      });
     }, { once: true });
   }
 
   function init() {
+    // ── Skeleton screen ───────────────────────────────────────
+    const skScreen = document.getElementById('skeleton-screen');
+    if (skScreen && !skScreen.dataset.skSetup) {
+      skScreen.dataset.skSetup = '1';
+
+      const footer = document.querySelector<HTMLElement>('.site-footer');
+      const wave   = document.querySelector<HTMLElement>('.wave-wrap');
+      [footer, wave].forEach(el => { if (el) el.style.opacity = '0'; });
+
+      const dismissSk = () => {
+        if (skScreen.classList.contains('is-gone')) return;
+        skScreen.classList.add('is-gone');
+        [footer, wave].forEach(el => {
+          if (!el) return;
+          el.style.transition = 'opacity 500ms ease';
+          el.style.opacity = '';
+          el.addEventListener('transitionend', () => { el.style.transition = ''; }, { once: true });
+        });
+        skScreen.addEventListener('transitionend', () => skScreen.remove(), { once: true });
+      };
+      dismissSkFn = dismissSk;
+      // Fallback: dismiss after 6s if gallery never loads
+      setTimeout(() => { dismissSkFn?.(); dismissSkFn = null; }, 6000);
+    }
+
     // Masonry grid sizing + staggered fade-in top-to-bottom
     document.querySelectorAll<HTMLImageElement>('.photo-img').forEach((img, i) => {
       const item = img.closest('.photo-item') as HTMLElement;
@@ -564,15 +525,16 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
       const reveal = () => {
         spanItem(item); // re-span with actual loaded dimensions
         updateOuterPadding();
-        // 60ms stagger per row (2 columns), capped at 300ms
-        item.style.transitionDelay = `${Math.min(Math.floor(i / 2) * 60, 300)}ms`;
-        item.classList.add('is-ready');
+        item.style.transitionDelay = '0ms';
+        requestAnimationFrame(() => {
+          item.classList.add('is-ready');
+        });
       };
 
       if (img.complete) {
-        reveal();
+        requestAnimationFrame(reveal);
       } else {
-        img.addEventListener('load', reveal, { once: true });
+        img.addEventListener('load', () => requestAnimationFrame(reveal), { once: true });
       }
     });
 
@@ -843,8 +805,34 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
     }, { signal });
   }
 
-  init();
-  document.addEventListener('astro:page-load', init);
+  function observeGallery() {
+    const root = document.querySelector<HTMLElement>('[data-pictures-root]');
+    if (!root) return;
+
+    // Gallery already present (e.g. cached navigation)
+    if (root.querySelector('[data-pictures-gallery]')) {
+      dismissSkFn?.();
+      dismissSkFn = null;
+      init();
+      return;
+    }
+
+    galleryObserver?.disconnect();
+    galleryObserver = new MutationObserver(() => {
+      if (root.querySelector('[data-pictures-gallery]')) {
+        galleryObserver?.disconnect();
+        dismissSkFn?.();
+        dismissSkFn = null;
+        init();
+      }
+    });
+    galleryObserver.observe(root, { childList: true, subtree: true });
+  }
+
+  document.addEventListener('astro:page-load', () => {
+    init();
+    observeGallery();
+  });
   let resizeRaf = 0;
   window.addEventListener('resize', () => {
     cancelAnimationFrame(resizeRaf);
