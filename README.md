@@ -30,7 +30,6 @@ Personal portfolio at [stanleyp.dev](https://stanleyp.dev). Built with Astro, de
 | `GET /api/artist-images` | Batch artist images from Spotify; CDN-cached 1h |
 | `GET /api/chat` | Last 50 chat messages |
 | `POST /api/chat` | Submit message (rate-limited, content-filtered) |
-| `GET/POST /api/views` | Visitor count |
 
 ## Environment Variables
 
