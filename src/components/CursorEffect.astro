@@ -137,7 +137,7 @@
       startFrame();
     }, { passive: true });
 
-    document.addEventListener('mouseleave', () => {
+    document.documentElement.addEventListener('mouseleave', () => {
       visible = false;
       if (dot)  dot.style.opacity  = '0';
       if (ring) ring.style.opacity = '0';
