@@ -283,8 +283,15 @@ const isChat     = pathname.startsWith('/chat');
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   function readColor() {
-    dotColor = getComputedStyle(document.documentElement)
-      .getPropertyValue('--dot').trim();
+    // Resolve --dot through the browser's style engine so we get an rgb()
+    // value.  Canvas 2D doesn't reliably support oklch() on all mobile
+    // browsers — getComputedStyle().backgroundColor always returns rgb().
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:absolute;width:0;height:0;visibility:hidden;background:var(--dot)';
+    document.body.appendChild(probe);
+    const resolved = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    dotColor = resolved || 'rgb(200,200,200)';
   }
 
   function buildGrid() {
@@ -292,8 +299,8 @@ const isChat     = pathname.startsWith('/chat');
     dots = [];
     const ox = SPACING / 2;
     const oy = SPACING / 2;
-    const cols = Math.ceil(canvas.width  / SPACING) + 2;
-    const rows = Math.ceil(canvas.height / SPACING) + 2;
+    const cols = Math.ceil(window.innerWidth  / SPACING) + 2;
+    const rows = Math.ceil(window.innerHeight / SPACING) + 2;
     for (let r = -1; r < rows; r++) {
       for (let c = -1; c < cols; c++) {
         const hx = ox + c * SPACING;
@@ -305,7 +312,7 @@ const isChat     = pathname.startsWith('/chat');
 
   function draw() {
     if (!canvas || !ctx) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
     ctx.fillStyle = dotColor;
     ctx.beginPath();
     for (const d of dots) {
@@ -358,9 +365,11 @@ const isChat     = pathname.startsWith('/chat');
   }
 
   function resize() {
-    if (!canvas) return;
-    canvas.width  = window.innerWidth;
-    canvas.height = window.innerHeight;
+    if (!canvas || !ctx) return;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width  = window.innerWidth  * dpr;
+    canvas.height = window.innerHeight * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     buildGrid();
     if (!rafRunning) draw();
   }
