@@ -144,11 +144,14 @@ const skRight = skPhotos.filter((_, i) => i % 2 !== 0);
   }
 
   .lightbox[open] {
+    position: fixed;
+    inset: 0;
+    margin: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    max-width: 100dvw;
-    max-height: 100dvh;
+    max-width: none;
+    max-height: none;
     width: 100%;
     height: 100%;
     overflow: hidden;
@@ -163,8 +166,6 @@ const skRight = skPhotos.filter((_, i) => i % 2 !== 0);
 
   .lightbox::backdrop {
     background: oklch(0% 0 0 / 0.6);
-    backdrop-filter: blur(2px);
-    -webkit-backdrop-filter: blur(2px);
   }
 
   .lightbox-content {
@@ -323,13 +324,6 @@ const skRight = skPhotos.filter((_, i) => i % 2 !== 0);
     letter-spacing: 0.06em;
     min-width: 5ch;
     text-align: center;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .lightbox::backdrop {
-      backdrop-filter: none;
-      -webkit-backdrop-filter: none;
-    }
   }
 
   @media (max-width: 600px) {
@@ -508,6 +502,16 @@ const skRight = skPhotos.filter((_, i) => i % 2 !== 0);
     updateLightbox({ hideUntilLoaded: true });
     savedFocus = document.activeElement as HTMLElement | null;
     dialog.showModal();
+
+    // Blur page content (inline style bypasses Astro scoping)
+    document.querySelector<HTMLElement>('.wrap')?.style.setProperty('filter', 'blur(2px)');
+
+    // Move custom cursor into dialog so it renders in the top layer
+    const dot = document.getElementById('cursor-dot');
+    const ring = document.getElementById('cursor-ring');
+    if (dot) dialog.appendChild(dot);
+    if (ring) dialog.appendChild(ring);
+
     dialog.querySelector<HTMLButtonElement>('.lightbox-close')?.focus();
     prefetchAdjacent();
   }
@@ -527,6 +531,15 @@ const skRight = skPhotos.filter((_, i) => i % 2 !== 0);
     dialog?.close();
     savedFocus?.focus();
     savedFocus = null;
+  }
+
+  /** Shared cleanup — runs on every dialog close (button, click-outside, Escape) */
+  function cleanupLightbox() {
+    document.querySelector<HTMLElement>('.wrap')?.style.removeProperty('filter');
+    const dot = document.getElementById('cursor-dot');
+    const ring = document.getElementById('cursor-ring');
+    if (dot) document.body.prepend(dot);
+    if (ring) document.body.insertBefore(ring, dot?.nextSibling ?? document.body.firstChild);
   }
 
   function navigate(delta: number) {
@@ -709,14 +722,12 @@ const skRight = skPhotos.filter((_, i) => i % 2 !== 0);
     dialog.querySelector('.lightbox-prev')?.addEventListener('click', () => navigate(-1), { signal });
     dialog.querySelector('.lightbox-next')?.addEventListener('click', () => navigate(1), { signal });
     dialog.querySelector('.lightbox-close')?.addEventListener('click', closeLightbox, { signal });
+    dialog.addEventListener('close', cleanupLightbox, { signal });
 
-    // Guard: suppress backdrop-close click if a drag just ended
     let wasDragging = false;
-
-    dialog.addEventListener('click', (e: MouseEvent) => {
-      if (wasDragging) return;
-      if (e.target === dialog) closeLightbox();
-    }, { signal });
+    let tapStartOutside = false;
+    let tapStartX = 0;
+    let tapStartY = 0;
 
     dialog.addEventListener('keydown', (e: KeyboardEvent) => {
       if (e.key === 'ArrowLeft') { e.preventDefault(); navigate(-1); }
@@ -761,6 +772,13 @@ const skRight = skPhotos.filter((_, i) => i % 2 !== 0);
 
     dialog.addEventListener('pointerdown', (e: PointerEvent) => {
       if (e.pointerType === 'mouse' && e.button !== 0) return;
+
+      // Close-outside: check coordinates against content rect (no DOM target ambiguity)
+      const r = dialog.querySelector('.lightbox-content')?.getBoundingClientRect();
+      tapStartOutside = !!r && (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom);
+      tapStartX = e.clientX;
+      tapStartY = e.clientY;
+
       dragState = { startX: e.clientX, startY: e.clientY, delta: 0, dragging: false, sign: 1, adjBase: 0 };
     }, { signal });
 
@@ -852,7 +870,19 @@ const skRight = skPhotos.filter((_, i) => i % 2 !== 0);
     };
 
     dialog.addEventListener('pointerup', releaseDrag, { signal });
+
+    // Close-outside via window-level pointerup — fires even if the dialog
+    // doesn't receive the event (e.g. backdrop edge cases, pointer redirection).
+    window.addEventListener('pointerup', (e: PointerEvent) => {
+      if (!dialog.open || !tapStartOutside) { tapStartOutside = false; return; }
+      tapStartOutside = false;
+      if (Math.hypot(e.clientX - tapStartX, e.clientY - tapStartY) < 30) {
+        closeLightbox();
+      }
+    }, { signal });
+
     dialog.addEventListener('pointercancel', () => {
+      downTarget = null;
       dragState = null;
       dialog.style.cursor = '';
       const img = dialog.querySelector<HTMLImageElement>('.lightbox-img');
@@ -894,6 +924,7 @@ const skRight = skPhotos.filter((_, i) => i % 2 !== 0);
   }
 
   document.addEventListener('astro:page-load', () => {
+    if (!document.querySelector('[data-pictures-root]')) return;
     init();
     observeGallery();
   });
