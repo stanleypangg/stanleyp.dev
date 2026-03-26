@@ -1,4 +1,4 @@
-# yet-another-portfolio-page
+# stanleyp.dev
 
 Personal portfolio at [stanleyp.dev](https://stanleyp.dev). Built with Astro, deployed on Vercel.
 
