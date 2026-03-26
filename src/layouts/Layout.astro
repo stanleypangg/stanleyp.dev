@@ -282,16 +282,63 @@ const isChat     = pathname.startsWith('/chat');
   const prefersReducedMotion =
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+  // Persistent probe for resolving --dot to rgb().  Canvas 2D doesn't
+  // reliably support oklch() on all mobile browsers, so we read the
+  // computed backgroundColor of a hidden div instead.
+  let probe: HTMLDivElement | null = null;
+
+  function ensureProbe(): HTMLDivElement {
+    if (!probe || !probe.isConnected) {
+      probe = document.createElement('div');
+      probe.style.cssText =
+        'position:absolute;width:0;height:0;visibility:hidden;pointer-events:none;background:var(--dot)';
+      document.body.appendChild(probe);
+    }
+    return probe;
+  }
+
   function readColor() {
-    // Resolve --dot through the browser's style engine so we get an rgb()
-    // value.  Canvas 2D doesn't reliably support oklch() on all mobile
-    // browsers — getComputedStyle().backgroundColor always returns rgb().
-    const probe = document.createElement('div');
-    probe.style.cssText = 'position:absolute;width:0;height:0;visibility:hidden;background:var(--dot)';
-    document.body.appendChild(probe);
-    const resolved = getComputedStyle(probe).backgroundColor;
-    probe.remove();
+    const p = ensureProbe();
+    const resolved = getComputedStyle(p).backgroundColor;
     dotColor = resolved || 'rgb(200,200,200)';
+  }
+
+  function removeProbe() {
+    if (probe?.isConnected) probe.remove();
+    probe = null;
+  }
+
+  // ── Transition-color sampling ───────────────────────────────
+  // During a theme transition the CSS --dot property interpolates over
+  // 350ms, but canvas doesn't participate in CSS transitions.  We
+  // re-sample the color on every frame so the dots follow along.
+  let samplingId = 0;
+
+  function startColorSampling() {
+    stopColorSampling();
+    const started = performance.now();
+    const DURATION = 370; // matches setTimeout in ThemeToggle.astro
+
+    function sample() {
+      readColor();
+      if (!rafRunning) draw();
+      if (performance.now() - started < DURATION) {
+        samplingId = requestAnimationFrame(sample);
+      } else {
+        samplingId = 0;
+        removeProbe();
+      }
+    }
+
+    samplingId = requestAnimationFrame(sample);
+  }
+
+  function stopColorSampling() {
+    if (samplingId) {
+      cancelAnimationFrame(samplingId);
+      samplingId = 0;
+    }
+    removeProbe();
   }
 
   function buildGrid() {
@@ -378,12 +425,14 @@ const isChat     = pathname.startsWith('/chat');
   function attachCanvas() {
     cancelAnimationFrame(rafId);
     rafRunning = false;
+    stopColorSampling();
 
     canvas = document.getElementById('bg-dots') as HTMLCanvasElement | null;
     if (!canvas) return;
     ctx = canvas.getContext('2d');
 
     readColor();
+    removeProbe();
     resize();
 
     // Restart animation if cursor is already on the page
@@ -398,6 +447,13 @@ const isChat     = pathname.startsWith('/chat');
 
   new MutationObserver(() => {
     readColor();
+
+    if (document.documentElement.classList.contains('theme-transitioning') && !prefersReducedMotion) {
+      startColorSampling();
+    } else {
+      stopColorSampling();
+    }
+
     if (!rafRunning) draw();
   }).observe(document.documentElement, {
     attributes: true,
