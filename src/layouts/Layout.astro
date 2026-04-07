@@ -245,6 +245,10 @@ const isChat     = pathname.startsWith('/chat');
 
       <footer class="site-footer" transition:persist>
         <span class="footer-updated">Updated {lastUpdated}</span>
+        <div class="webring-bar">
+          <div data-webring="ca" data-member="stanley" style="--webring-size: 0.7rem;"></div>
+        </div>
+        <script src="https://webring.ca/embed.js" defer></script>
         <span class="footer-visitors" aria-live="polite">
           <span class="eye-icon" aria-hidden="true"></span>
           <span id="visitor-count">—</span>
