@@ -15,6 +15,7 @@
 
 <style>
   .wave-wrap {
+    --wave-overflow: 40px;
     position: relative;
     margin-top: 1rem;
     height: 52px;       /* keep layout footprint stable */
@@ -24,12 +25,18 @@
   .wave-viz {
     display: block;
     width: 100%;
-    height: calc(52px + 40px); /* 40px overflow headroom above */
-    margin-top: -40px;         /* shift up; floor stays at wrap bottom */
+    height: calc(52px + var(--wave-overflow)); /* overflow headroom above */
+    margin-top: calc(-1 * var(--wave-overflow)); /* shift up; floor stays at wrap bottom */
   }
 
   @media (hover: hover) {
     .wave-viz { cursor: crosshair; }
+  }
+
+  @media (max-width: 600px), (hover: none) {
+    .wave-wrap {
+      --wave-overflow: 12px;
+    }
   }
 
 </style>
@@ -59,7 +66,7 @@
     const MIN_H       = 3;     // minimum bar height px
     const HOVER_RATE  = 0.08;  // lerp speed: hover color
     const PLAY_RATE   = 0.018; // lerp speed: playing ↔ paused (slow, graceful)
-    const OVERFLOW_H  = 40;    // px of canvas headroom above the visible zone
+    let overflowH     = 40;    // px of canvas headroom above the visible zone
 
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -137,6 +144,8 @@
     function setup() {
       const dpr  = window.devicePixelRatio || 1;
       const rect = canvas!.getBoundingClientRect();
+      const overflow = Number.parseFloat(getComputedStyle(wrap!).getPropertyValue('--wave-overflow'));
+      overflowH = Number.isFinite(overflow) ? overflow : 40;
       canvasLeft = rect.left;
       logW = rect.width;
       logH = rect.height;
@@ -171,7 +180,7 @@
 
       // visH is the visible 52px zone; logH includes the overflow headroom above.
       // All amplitude math uses visH so behaviour is unchanged vs. before.
-      const visH  = logH - OVERFLOW_H;
+      const visH  = logH - overflowH;
 
       const N     = Math.floor(logW / PITCH);
       const sigma = CURSOR_RADIUS / 2.5; // gaussian std-dev for cursor bulge
