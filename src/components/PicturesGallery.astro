@@ -1,6 +1,7 @@
 ---
 import { mapResource, sortNewestFirst, type Photo } from '../lib/cloudinary';
 import photoOrder from '../data/photo-order.json';
+import { getMasonryColumnIndexes } from '../lib/masonry';
 
 const { CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET } = import.meta.env;
 
@@ -49,6 +50,10 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
     );
   }
 }
+
+const photoColumns = getMasonryColumnIndexes(photos);
+const getPhotoItemClass = (index: number) =>
+  `photo-item${index < 6 ? ' is-eager' : ''} ${photoColumns[index] === 0 ? 'is-left-column' : 'is-right-column'}`;
 ---
 
 <div data-pictures-gallery>
@@ -57,7 +62,7 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
   ) : (
     <ul class="photo-grid">
       {photos.map((photo, i) => (
-        <li class={`photo-item${i < 6 ? ' is-eager' : ''}`}>
+        <li class={getPhotoItemClass(i)}>
           <div class="photo-wrap" role="button" tabindex="0" aria-label={photo.alt || `Photo ${i + 1}`}>
             <span class="photo-skeleton" aria-hidden="true"></span>
             <img

@@ -4,6 +4,7 @@ export const prerender = false;
 import Layout from '../layouts/Layout.astro';
 import PicturesGallery from '../components/PicturesGallery.astro';
 import photoMeta from '../data/photo-order.json';
+import { getMasonryColumns } from '../lib/masonry';
 
 // Cache at Vercel's CDN edge: serve cached for 1h, revalidate in background for up to 24h
 Astro.response.headers.set('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
@@ -11,8 +12,9 @@ Astro.response.headers.set('Cache-Control', 's-maxage=3600, stale-while-revalida
 const skPhotos = photoMeta
   .filter((p): p is { id: string; w: number; h: number } => typeof p === 'object' && 'w' in p)
   .slice(0, 12);
-const skLeft = skPhotos.filter((_, i) => i % 2 === 0);
-const skRight = skPhotos.filter((_, i) => i % 2 !== 0);
+const [skLeft, skRight] = getMasonryColumns(
+  skPhotos.map((p) => ({ ...p, width: p.w, height: p.h }))
+);
 
 ---
 
@@ -419,8 +421,8 @@ const skRight = skPhotos.filter((_, i) => i % 2 !== 0);
       item.style.transitionDelay = '0ms';
     });
 
-    updateOuterPadding();
     spanAll();
+    updateOuterPadding();
 
     // Add .is-ready in next frame after layout settles
     requestAnimationFrame(() => {
@@ -604,8 +606,8 @@ const skRight = skPhotos.filter((_, i) => i % 2 !== 0);
     });
 
     // Initial layout — batched reads then writes, no per-item thrashing
-    updateOuterPadding();
     spanAll();
+    updateOuterPadding();
 
     // Abort previous listeners before re-attaching.
     // init() runs twice on first load (direct call + astro:page-load), which would
