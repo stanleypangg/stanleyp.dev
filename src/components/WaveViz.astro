@@ -20,6 +20,7 @@
     margin-top: 1rem;
     height: 52px;       /* keep layout footprint stable */
     overflow: visible;  /* allow bars to poke above */
+    pointer-events: none;
   }
 
   .wave-viz {
@@ -27,10 +28,7 @@
     width: 100%;
     height: calc(52px + var(--wave-overflow)); /* overflow headroom above */
     margin-top: calc(-1 * var(--wave-overflow)); /* shift up; floor stays at wrap bottom */
-  }
-
-  @media (hover: hover) {
-    .wave-viz { cursor: crosshair; }
+    pointer-events: none; /* visual overflow must not block nearby links */
   }
 
   @media (max-width: 600px), (hover: none) {
@@ -75,7 +73,6 @@
     let npPresent = !!document.getElementById('np-wrap');
 
     let logW = 0, logH = 0;
-    let canvasLeft = 0;
     let rafId = 0;
     let startTs: number | null = null;
     let visible = true;
@@ -146,7 +143,6 @@
       const rect = canvas!.getBoundingClientRect();
       const overflow = Number.parseFloat(getComputedStyle(wrap!).getPropertyValue('--wave-overflow'));
       overflowH = Number.isFinite(overflow) ? overflow : 40;
-      canvasLeft = rect.left;
       logW = rect.width;
       logH = rect.height;
       canvas!.width  = Math.round(logW * dpr);
@@ -259,6 +255,29 @@
       }
     }
 
+    function getWaveX(clientX: number, clientY: number): number | null {
+      const rect = canvas!.getBoundingClientRect();
+      const withinX = clientX >= rect.left && clientX <= rect.right;
+      const withinY = clientY >= rect.top && clientY <= rect.bottom;
+      return withinX && withinY ? clientX - rect.left : null;
+    }
+
+    function triggerRipple(x: number) {
+      // Find first dead slot
+      for (let r = 0; r < MAX_RIPPLES; r++) {
+        if (!ripples[r].alive) {
+          ripples[r].x = x; ripples[r].t = 0; ripples[r].amp = 1; ripples[r].alive = true;
+          return;
+        }
+      }
+      // All slots full — overwrite lowest-amplitude ripple
+      let minIdx = 0;
+      for (let r = 1; r < MAX_RIPPLES; r++) {
+        if (ripples[r].amp < ripples[minIdx].amp) minIdx = r;
+      }
+      ripples[minIdx].x = x; ripples[minIdx].t = 0; ripples[minIdx].amp = 1; ripples[minIdx].alive = true;
+    }
+
     // ── Init ────────────────────────────────────────────────────
     setup();
     observePlayState();
@@ -269,30 +288,28 @@
       rafId = requestAnimationFrame(tick);
     }
 
-    // Hover brightening + cursor tracking
-    canvas.addEventListener('mouseenter', () => { hoverTarget = 1; });
-    canvas.addEventListener('mouseleave', () => { hoverTarget = 0; cursorX = -1; });
-
     if (!reducedMotion) {
-      canvas.addEventListener('mousemove', (e: MouseEvent) => {
-        cursorX = e.clientX - canvasLeft;
+      document.addEventListener('mousemove', (e: MouseEvent) => {
+        const waveX = getWaveX(e.clientX, e.clientY);
+        if (waveX === null) {
+          hoverTarget = 0;
+          cursorX = -1;
+          return;
+        }
+
+        hoverTarget = 1;
+        cursorX = waveX;
       }, { passive: true });
 
-      canvas.addEventListener('click', (e: MouseEvent) => {
-        const clickX = e.clientX - canvasLeft;
-        // Find first dead slot
-        for (let r = 0; r < MAX_RIPPLES; r++) {
-          if (!ripples[r].alive) {
-            ripples[r].x = clickX; ripples[r].t = 0; ripples[r].amp = 1; ripples[r].alive = true;
-            return;
-          }
-        }
-        // All slots full — overwrite lowest-amplitude ripple
-        let minIdx = 0;
-        for (let r = 1; r < MAX_RIPPLES; r++) {
-          if (ripples[r].amp < ripples[minIdx].amp) minIdx = r;
-        }
-        ripples[minIdx].x = clickX; ripples[minIdx].t = 0; ripples[minIdx].amp = 1; ripples[minIdx].alive = true;
+      document.addEventListener('mouseleave', () => {
+        hoverTarget = 0;
+        cursorX = -1;
+      });
+
+      document.addEventListener('click', (e: MouseEvent) => {
+        const waveX = getWaveX(e.clientX, e.clientY);
+        if (waveX === null) return;
+        triggerRipple(waveX);
       });
     }
 
