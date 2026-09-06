@@ -3,7 +3,7 @@ import Layout from '../layouts/Layout.astro';
 import NowPlaying from '../components/NowPlaying.astro';
 ---
 
-<Layout title="Software Engineer" description="Stanley Pang — CS student at the University of Toronto, software engineer intern at Shopify. Building software that actually works.">
+<Layout title="Software Engineer" description="Stanley Pang — CS student at the University of Toronto and software engineer intern at Tesla. Building software that actually works.">
 <div class="home-layout">
   <!-- Hero -->
   <header class="hero">
@@ -13,7 +13,7 @@ import NowPlaying from '../components/NowPlaying.astro';
       <p class="bio">
         I like making software that actually works for people, and I like understanding
         exactly how it does that. <span class="bio-detail">Studying CS at the University of Toronto,
-        interning at Capital One.</span>
+        interning at Tesla.</span>
       </p>
     </div>
     <div class="hero-photo">
@@ -26,6 +26,14 @@ import NowPlaying from '../components/NowPlaying.astro';
     <h2 class="label" id="section-work">Work</h2>
     <div class="role-list">
       <div class="work-item">
+        <img src="/tesla-symbol.jpg" alt="Tesla" class="work-logo work-logo--round" width="36" height="36" loading="lazy" decoding="async" />
+        <div class="item-text">
+          <span class="entry-title">Tesla</span>
+          <p class="work-role">Software Engineer Intern</p>
+        </div>
+        <span class="entry-meta">Fall 2026</span>
+      </div>
+      <div class="work-item">
         <img src="/capital-one-logo.jpg" alt="Capital One" class="work-logo work-logo--round" width="36" height="36" loading="lazy" decoding="async" />
         <div class="item-text">
           <span class="entry-title">Capital One</span>
@@ -34,7 +42,7 @@ import NowPlaying from '../components/NowPlaying.astro';
         <span class="entry-meta">Summer 2026</span>
       </div>
       <div class="work-item">
-        <img src="/shopify-logo.svg" alt="Shopify" class="work-logo" width="36" height="36" loading="lazy" />
+        <img src="/shopify-logo.jpg" alt="Shopify" class="work-logo work-logo--round" width="36" height="36" loading="lazy" decoding="async" />
         <div class="item-text">
           <span class="entry-title">Shopify</span>
           <p class="work-role">Software Engineer Intern</p>
@@ -133,7 +141,7 @@ import NowPlaying from '../components/NowPlaying.astro';
   "name": "Stanley Pang",
   "url": "https://stanleyp.dev",
   "jobTitle": "Software Engineer",
-  "description": "CS student at the University of Toronto, software engineer intern at Shopify.",
+  "description": "CS student at the University of Toronto and software engineer intern at Tesla.",
   "alumniOf": {
     "@type": "EducationalOrganization",
     "name": "University of Toronto"
