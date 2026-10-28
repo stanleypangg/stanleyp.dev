@@ -41,8 +41,6 @@ const pageTitle = title === 'Stanley Pang' ? title : `${title} — Stanley Pang`
 const pathname = Astro.url.pathname;
 const lastUpdated = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 const isHome     = pathname === '/';
-const isProjects = pathname.startsWith('/projects');
-const isWriting  = pathname.startsWith('/writing');
 const isMusic    = pathname.startsWith('/music');
 const isPictures = pathname.startsWith('/pictures');
 const isChat     = pathname.startsWith('/chat');
@@ -193,20 +191,6 @@ const isChat     = pathname.startsWith('/chat');
             <img src="/logo.png" alt="" class="nav-logo" width="28" height="28" transition:persist="nav-logo" />
           </a>
           <ul class="nav-links">
-            <li>
-              <a
-                href="/projects"
-                class="nav-link"
-                aria-current={isProjects ? 'page' : undefined}
-              >projects</a>
-            </li>
-            <li>
-              <a
-                href="/writing"
-                class="nav-link"
-                aria-current={isWriting ? 'page' : undefined}
-              >writing</a>
-            </li>
             <li>
               <a
                 href="/music"
